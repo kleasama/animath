@@ -354,41 +354,75 @@ kept if it exists and a visual is alive; at most 6, evenly subsampled. A transie
 
 | Module | Content |
 |---|---|
-| `verbalize` | split prose and inline math (`$…$`, `$$…$$`, `\(…\)`); TeX → MathML (MathJax 3.2.1) → speech (SRE 4.1.4, ClearSpeak) in one `node sre.cjs` call per stage run |
-| `tts` | `TTS` protocol (`id`, `rate`, `synth(text) -> int16 PCM`); `Kokoro`, `Espeak`; WAV I/O |
-| `align` | trim, concatenate, bookmark and word times (Algorithm 10.1) |
-| `subtitles` | WebVTT cues |
+| `verbalize` | split prose and inline math (`$…$`, `$$…$$`, `\(…\)`); `TEX` rewrites → MathML (MathJax 3.2.1) → speech (SRE 4.1.4, ClearSpeak) → `SPEECH` rewrites (§10.6), one `node sre.cjs` call per stage run |
+| `g2p` | spoken forms, espeak-ng IPA mapped to the misaki inventory, per-word alignment (Algorithm 10.2) |
+| `tts` | `TTS` protocol (`id`, `rate`, `synth(text) -> (int16 PCM, word spans)`); `Kokoro`, `Espeak`; WAV I/O |
+| `align` | sentence timeline: trim, fades, gaps, word and bookmark times (Algorithm 10.3) |
 | `proc` | subprocess call with typed failure |
 
-10.2 Runtime requirements: `espeak-ng` on `PATH`; `NODE_PATH` holding `speech-rule-engine@4.1.4` and `mathjax-full@3.2.1`; for Kokoro a directory with `model.onnx` (onnx-community/Kokoro-82M-v1.0-ONNX), `config.json` with key `vocab` (hexgrad/Kokoro-82M), `voices/<voice>.bin` (float32, $510\times256$).
+10.2 Runtime requirements: `espeak-ng` on `PATH`; `NODE_PATH` holding `speech-rule-engine@4.1.4` and `mathjax-full@3.2.1`; for Kokoro, `ANIMATH_KOKORO` naming a directory with the files below. Hugging Face is unreachable from the build containers; GitHub release assets are reachable. Weights are never committed.
 
-| Backend | Rate | Input | Status |
+| File | Source | SHA-256 |
+|---|---|---|
+| `kokoro-v1.0.onnx` | release `model-files-v1.0` of `thewh1teagle/kokoro-onnx` | `7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5` |
+| `voices-v1.0.bin` | same release; npz, voice $\to 510\times1\times256$ float32 | `bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d` |
+| `config.json` | `src/kokoro_onnx/config.json` of the same repository; key `vocab` (114 symbols) | `5abb01e2403b072bf03d04fde160443e209d7a0dad49a423be15196b9b43c17f` |
+
+| Backend | Rate | Default | Status |
 |---|---|---|---|
-| `Kokoro` (default, SPEC Q6) | 24 kHz | espeak-ng IPA → vocab ids, chunks $\le 510$, style row $\lvert\text{chunk}\rvert-1$ | tested against a fake ONNX session only: Hugging Face is unreachable from the build containers |
-| `Espeak` | 22.05 kHz | text on stdin | verified |
+| `Kokoro` (SPEC Q6) | 24 kHz | voice `af_heart`, speed 0.85 | verified with the weights above |
+| `Espeak` (no `ANIMATH_KOKORO`) | 22.05 kHz | `en-us`, 140 wpm | verified; last resort |
+
+Other voices of the file: `am_michael` (US), `bf_emma`, `bm_george` (GB; prefix `b` selects `en-gb` phonemes), and the rest of the Kokoro v1.0 list. The `voice` parameter selects one (§12.1).
 
 10.3 Cache key. With $v$ the stage version,
 $$k = d\big(["\text{narrate}", v, d(\text{id}, \text{narration}), \text{tts.id}, \text{verbalizer.id}]\big). \tag{10.1}$$
-Edits to visuals, math or duration of a scene do not trigger re-synthesis.
+`tts.id` = `kokoro:` model SHA-256 prefix, voice, speed, $d$(lexicon, word list, phoneme map, vocab, voice style); `verbalizer.id` = `sre:` domain, $d$(`TEX`, `SPEECH`). Edits to visuals, math or duration of a scene do not trigger re-synthesis; edits to any pronunciation table do.
 
-**Algorithm 10.1 (timeline).** Rate $r$, gap $g = \operatorname{round}(0.3\,r)$, offset $o_1 = 0$. For each line $i$:
-1. Synthesize; let $[a_i, b_i)$ be the samples between the first and last with $\lvert x\rvert > 328$ (≈ −40 dBFS); $n_i = b_i - a_i$; silence raises `NarrateError`.
-2. Bookmark of $\ell_i$ at $o_i / r$.
-3. Tokens $\tau_1,\dots,\tau_K$ with weights $w_k = 1 + \#\text{alnum}(\tau_k)$, $C_k = \sum_{j\le k} w_j$; token $k$ spans
-$$\big[\,o_i + \operatorname{round}(n_i C_{k-1}/C_K),\; o_i + \operatorname{round}(n_i C_k/C_K)\,\big] / r. \tag{10.2}$$
-4. $o_{i+1} = o_i + n_i + g$.
+10.4 Sentences. Lines are joined until one ends in `.`, `!` or `?` (closing quotes and brackets allowed after it); each sentence is one `synth` call, so intonation runs across line boundaries. A bookmark is the index of its line's first word within the sentence.
 
-Output: voiced segments joined by $g$ zeros (no trailing gap); duration $= \sum_i n_i/r + (m-1)g/r$. Integer sample arithmetic guarantees the `Narration` validators (monotone words, last end $\le$ duration).
+**Algorithm 10.1 (Kokoro synthesis).** Input: words $w_1,\dots,w_n$ of a sentence.
+1. Phonemes $p_i$ by Algorithm 10.2. Leading and trailing punctuation $o_i, c_i$ of $w_i$ stays in the token stream (`;:,.!?—…"()“”`): Kokoro renders it as pauses and intonation.
+2. Tokens $t = o_1 p_1 c_1 \sqcup \dots \sqcup o_n p_n c_n$, $\sqcup$ the space id. If $\lvert t\rvert > 510$, split recursively at the clause end nearest the middle of the token count.
+3. Run the graph on $[0, t, 0]$ with style row $S_{\text{voice}}[\lvert t\rvert - 1]$ and speed $\sigma$. The graph also outputs `/encoder/Clip_output_0`, the duration $\delta_j \ge 1$ of input token $j$ in frames of $h = 600$ samples; the audio has $h\sum_j \delta_j$ samples.
+4. With $F_j = h\sum_{k<j}\delta_k$ and $[a_i, b_i)$ the token range of $p_i$ in $t$, word $i$ spans samples
+$$\big[F_{a_i+1},\; F_{b_i+1}\big), \tag{10.2}$$
+the shift by one accounting for the leading pad token.
+5. Scale by $\frac12$ (raw peaks reach full scale), round to int16.
 
-10.4 Accuracy. Bookmarks coincide with speech onset up to the threshold, so $Q_3$ at bookmark granularity holds by construction. Word times (10.2) are length-proportional estimates used only for subtitles.
+The extra output is added by editing the serialized `ModelProto` (field 7 graph, field 12 output, `ValueInfoProto` name field 1); no `onnx` dependency.
 
-10.5 Subtitles. A cue holds at most two lines of 42 columns; a new cue starts after `.?!` or a pause $> 0.25$ s. `subtitles.vtt([(narration, offset), …])` is called by the orchestrator (Rule 6.2 forbids `assemble` to import `narrate`).
+**Algorithm 10.2 (phonemes, `g2p.Phonemizer`).**
+1. Spoken core of each word, punctuation split off: lexicon entries as espeak mnemonics (*Schur* `[[S'Ur]]`, *Galerkin*, *Lanczos*, …); 2–4 capitals or hyphenated capitals spelled (*LU* → L U, *RS-S* → R S S; *BLAS*, *NASA*, *RAM*, *SIAM* read as words); the letter *A* before an operator word, a single letter or the end `[['eI]]`.
+2. Clauses: maximal runs of words without inner punctuation. In-context IPA $c$ of each clause: one `espeak-ng --ipa --tie=^` call, mapped to the misaki inventory (`COMMON | E2M[lang]`, longest match first).
+3. Stand-alone IPA $s_1,\dots,s_n$ of all cores: one call, one core per line, `-l 4096` (every line a clause); stress marks dropped. A line count other than $n$ raises `NarrateError`.
+4. espeak joins function words (*from the* → `fɹʌmðə`, *for a* → `fəɹɹə`) and expands numbers, so $c$ has no one-to-one word split. Align $b = s_1 \sqcup \dots \sqcup s_n$ with $c$ stripped of stress marks (`difflib.SequenceMatcher`, no autojunk). The separator after $s_i$ maps through the opcode containing it: exactly for `equal`, proportionally for `replace`, to the opcode start for `delete`. $c$ is cut there; a stress mark at a cut goes to the following word.
 
-10.6 Concurrency. Scenes run on a thread pool of `workers`; formulas of all uncached scenes are verbalized in one subprocess before the pool starts; the ONNX session is shared (thread-safe `run`) with `intra_op_num_threads` fixed for determinism.
+$p_i$ is the in-context pronunciation of $w_i$, non-empty for every pronounced word, so (10.2) gives every word a positive span.
 
-10.7 Deviations from SPEC §6.3. Forced alignment (torchaudio) is not used: per-line synthesis makes bookmarks exact, torchaudio's `forced_align` is deprecated, and torch would dominate the image. espeak-ng IPA drops punctuation, so Kokoro prosody lacks pause cues.
+**Algorithm 10.3 (timeline, `align.timeline`).** Rate $r$; sentences $k = 1,\dots,K$ with PCM $x_k$ and spans (10.2).
+1. Bounds $[a_k, b_k)$: first to last 10 ms frame with RMS above $-60$ dBFS, widened by 50 ms, clamped; a silent sentence raises `NarrateError`.
+2. Raised-cosine fades of $m = 0.01r$ samples at both ends, gain $\frac12 - \frac12\cos\big(\pi (j+\frac12)/m\big)$, $j < m$.
+3. Layout: $L = 0.3$ s silence, each faded sentence followed by $G = 0.4$ s, the last gap replaced by $T = 0.6$ s. Offsets $o_1 = Lr$, $o_{k+1} = o_k + b_k - a_k + Gr$.
+4. Word times $\big(o_k + \operatorname{clip}(\text{span}, a_k, b_k) - a_k\big)/r$; a bookmark is the start of its word.
 
-10.8 Measurements (4 cores, Espeak, two lines with three formulas): cold 0.74 s, cached 0.22 s, including interpreter start.
+Duration $= L + T + (K-1)G + \sum_k (b_k - a_k)/r$. Silence between sentences is $G$ plus both pads, ≈ 0.5 s; within a sentence only the model's own pauses occur.
+
+10.5 Accuracy. Word times are the model's token durations, exact to one frame (25 ms); bookmarks are word starts, so $Q_3$ holds by construction. Measured on the §2.8 test narration (11 scenes, 789 words, `af_heart`, speed 0.85): 140 wpm overall, 151 wpm within sentences; Whisper base.en (offline) transcribed 92.7 % of the words verbatim, the rest spelling variants (*colour*, numerals).
+
+10.6 Math speech. `TEX` rewrites before SRE: `\mathcal H^2` → H two; two-digit subscripts spaced; upright superscript words read as words. `SPEECH` rewrites after SRE turn ClearSpeak into lecture style: powers $-1$, $T$, $-T$, $*$, $H$ → inverse, transpose, inverse transpose, star, Hermitian; *raised to the k power* → to the k; fractions and *divided by* → over; *the metric of x sub 2* → the 2 norm of x; *script l* → ell; *O of* → order; font words, parentheses and *sub* dropped; *comma dot dot dot comma* → up to; *negative* → minus; *is a member of* → in.
+
+| TeX | Spoken |
+|---|---|
+| `L_{21}`, `D_{RR}`, `\mathcal N(t)` | L 2 1, D R R, N of t |
+| `\epsilon_L/u`, `\chi/(1-\chi)` | epsilon L over u, chi over 1 minus chi |
+| `\mathcal H^2`, `\|A^{-1}\|_2` | H two, the 2 norm of A inverse |
+
+10.7 Concurrency. Scenes run on a thread pool of `workers`; formulas of all uncached scenes are verbalized in one subprocess before the pool starts; the ONNX session is shared (thread-safe `run`) with `intra_op_num_threads` fixed for determinism.
+
+10.8 Deviations from SPEC §6.3. No forced alignment (torchaudio): the duration output gives token times directly, `forced_align` is deprecated, and torch would dominate the image.
+
+10.9 Measurements (4 cores): Kokoro load ≈ 6 s (325 MB model read and edited); the 789-word narration (340 s of audio) synthesizes in 186 s with 4 threads; Espeak, two lines with three formulas: cold 0.74 s.
 
 ## 11 Assembly
 
@@ -402,13 +436,15 @@ Segment $i$ is exactly $n_i$ frames and $S_i$ samples; $\sum_i S_i = \operatorna
 1. Load artifacts; require renders and narrations to cover the storyboard scenes bijectively.
 2. Probe clips: equal width, height, $f$; $\lvert \text{probe} - \text{claimed}\rvert \le 0.1$ s for every clip and audio.
 3. Compute (11.1); build WebVTT (§11.3).
-4. Loudness pass 1: concatenate trimmed narration, `loudnorm` (EBU R128, $I=-16$ LUFS, $TP=-1.5$ dBTP, $LRA=11$) measurement; silent narration is an error.
-5. Pass 2, one `ffmpeg` call: per clip `fps`, `tpad` (clone last frame), `trim` to $n_i$; per narration resample to $R$ mono, `apad`, `atrim` to $S_i$; `concat`; linear `loudnorm` with measured values; H.264 High, yuv420p, CRF 18, AAC 160 kb/s, faststart, bitexact flags, metadata stripped.
-6. Verify output: h264, aac at $R$, duration within 0.1 s of $T_N$. Store video and subtitles blobs, then the `Manifest`.
+4. Loudness pass 1: concatenate trimmed narration; `loudnorm` measures integrated loudness $I$ (EBU R128) and true peak; silent narration is an error.
+5. Pass 2, one `ffmpeg` call: per clip `fps`, `tpad` (clone last frame), `trim` to $n_i$; per narration resample to $R$ mono, `apad`, `atrim` to $S_i$; `concat`; gain $-16 - I$ dB, then `alimiter` (ceiling $-2.5$ dBFS, attack 5 ms, release 80 ms, look-ahead, no auto-level); H.264 High, yuv420p, CRF 18, AAC 160 kb/s, faststart, bitexact flags, metadata stripped.
+6. Verify output: h264, aac at $R$, duration within 0.1 s of $T_N$; measure its loudness and true peak (pass 3). Store video and subtitles blobs, then the `Manifest`.
+
+Why not linear `loudnorm`: its linear mode needs measured peak plus gain below the target peak; speech whose true peak exceeds its loudness by more than 14.5 dB (Kokoro at speed 0.85: ≈ 20 dB) forces the dynamic mode, which pumps. A fixed gain and a look-ahead limiter that only touches transients keep $I$ within 1 LU of the target and the true peak below $-1.5$ dBTP after AAC (§2.8 test, three scenes: $-16.4$ LUFS, $-2.0$ dBTP; sine with sparse impulses: $-16.6$ LUFS, $-2.5$ dBTP). One gain serves the whole film, so scenes differ only by their own loudness (Kokoro: 0.65 LU spread over 11 scenes).
 
 11.3 Subtitles. Words are grouped greedily into cues, closed at a word ending in `. ? ! ; :`, before exceeding 84 characters, or before spanning 6 s; cues longer than 42 characters wrap once at the space nearest the middle; text is HTML-escaped. The global VTT is built here, since only assembly knows $T_i$.
 
-11.4 Manifest. `artifacts` = {`storyboard`, `render/<id>`, `narration/<id>`}; `versions` = {`assemble`, `ffmpeg`}; `timings_s.assemble`; `metrics` = {`duration_s` $=T_N$, `loudness_in_lufs`, `true_peak_in_dbtp`} (input, pass 1). `usage` is zero; the orchestrator adds stage usage.
+11.4 Manifest. `artifacts` = {`storyboard`, `render/<id>`, `narration/<id>`}; `versions` = {`assemble`, `ffmpeg`}; `timings_s.assemble`; `metrics` = {`duration_s` $=T_N$, `loudness_in_lufs`, `true_peak_in_dbtp` (narration, pass 1), `loudness_out_lufs`, `true_peak_out_dbtp` (encoded output, pass 3)}. `usage` is zero; the orchestrator adds stage usage.
 
 11.5 Notes. Clip audio is ignored; narration is the only audio. Output bytes are reproducible for fixed inputs, ffmpeg build and $p$; $p$ changes x264 output, hence in $k$. Requires `ffmpeg`, `ffprobe` (apt `ffmpeg`, with libx264). Blobs are passed to ffmpeg by store path (content-probed); only the output uses a temporary directory, removed on exit.
 
@@ -482,6 +518,7 @@ $f$ the animate function's qualified name, $\pi_5$ = (`width`, `height`, `fps`, 
 | Draft render, 12 s scene, 8 primitives (`surface` included) | ≈ 10.5 s on 4 cores |
 | `tests/extract` | ≈ 2 s on 4 cores |
 | `tests/scene` WP8 part | ≈ 10 s on 4 cores |
+| Narration, Kokoro `af_heart`, 789 words (340 s of audio), 4 threads | 186 s |
 
 ## 14 Decisions log
 

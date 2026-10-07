@@ -5,8 +5,8 @@ import pytest
 
 from animath.core.schemas import Line, Narration, Scene, Storyboard, Visual
 from animath.core.store import Store
-from animath.narrate import key, narrate
-from animath.narrate.tts import PCM, from_wav
+from animath.narrate import key, narrate, sentences
+from animath.narrate.tts import PCM, Spans, from_wav
 from animath.narrate.verbalize import Verbalizer
 from tests.narrate.conftest import Script, tone
 
@@ -14,6 +14,8 @@ SAY = 'r = json.load(sys.stdin); print(json.dumps(["ex " * len(t) for t in r["la
 
 
 class FakeTTS:
+    """Each word is 40 samples of tone after 3 silent samples; 9 silent samples close."""
+
     id = "fake:1"
     rate = 1000
 
@@ -21,10 +23,11 @@ class FakeTTS:
         self.calls: list[str] = []
         self.lock = threading.Lock()
 
-    def synth(self, text: str) -> PCM:
+    def synth(self, text: str) -> tuple[PCM, Spans]:
         with self.lock:
             self.calls.append(text)
-        return tone(40 * len(text.split()), lead=3, tail=9)
+        n = len(text.split())
+        return tone(40 * n, lead=3, tail=9), [(3 + 40 * i, 43 + 40 * i) for i in range(n)]
 
 
 @pytest.fixture
@@ -45,6 +48,21 @@ BOARD = Storyboard(
 )
 
 
+def test_sentences_join_lines_until_a_stop() -> None:
+    lines = [
+        Line(text="Take one leaf,", bookmark="t"),
+        Line(text="with its coordinates.", bookmark="c"),
+        Line(text="Then stop"),
+        Line(text='here, he said "now."', bookmark="h"),
+        Line(text="Tail", bookmark="z"),
+    ]
+    assert sentences(lines, [ln.text for ln in lines]) == [
+        ("Take one leaf, with its coordinates.", {"t": 0, "c": 3}),
+        ('Then stop here, he said "now."', {"h": 2}),
+        ("Tail", {"z": 0}),
+    ]
+
+
 def test_narrate_produces_valid_narrations(store: Store, verbalizer: Verbalizer) -> None:
     tts = FakeTTS()
     out = narrate(BOARD, store, tts, verbalizer)
@@ -52,10 +70,11 @@ def test_narrate_produces_valid_narrations(store: Store, verbalizer: Verbalizer)
     assert tts.calls == ["Minimise ex over K.", "Stop.", "Restart."]
     n = store.get(Narration, out["s1"])
     assert n.scene_id == "s1"
-    assert n.bookmarks == {"k": 0.0}
+    assert n.bookmarks == {"k": 0.303}
     assert [w.text for w in n.words] == ["Minimise", "ex", "over", "K.", "Stop."]
-    assert n.duration_s == (160 + 300 + 40) / 1000
-    assert from_wav(store.get_blob(n.audio), 1000).size == 500
+    assert (n.words[3].end, n.words[4].start) == (0.463, 0.875)
+    assert n.duration_s == (300 + 172 + 400 + 52 + 600) / 1000
+    assert from_wav(store.get_blob(n.audio), 1000).size == 1524
     assert store.lookup(Narration, key(BOARD.scenes[1], tts, verbalizer)) is not None
 
 
