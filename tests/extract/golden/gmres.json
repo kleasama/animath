@@ -1,0 +1,168 @@
+{
+ "nodes": [
+  {
+   "id": "residual",
+   "kind": "symbol",
+   "name": "initial residual",
+   "latex": "r_0",
+   "meaning": "Initial residual $b-Ax_0=b$.",
+   "key": false,
+   "sources": [
+    "b1"
+   ]
+  },
+  {
+   "id": "krylov",
+   "kind": "symbol",
+   "name": "Krylov subspace",
+   "latex": "\\mathcal{K}_{m}(A,r_0)",
+   "meaning": "Span of $r_0, Ar_0, \\dots, A^{m-1}r_0$.",
+   "key": false,
+   "sources": [
+    "b2"
+   ]
+  },
+  {
+   "id": "gmres",
+   "kind": "equation",
+   "name": "GMRES minimization",
+   "latex": null,
+   "meaning": null,
+   "key": true,
+   "sources": [
+    "b2"
+   ]
+  },
+  {
+   "id": "basis",
+   "kind": "symbol",
+   "name": "Arnoldi basis",
+   "latex": "V_m",
+   "meaning": "Matrix whose orthonormal columns span the Krylov subspace.",
+   "key": false,
+   "sources": [
+    "b4"
+   ]
+  },
+  {
+   "id": "hessenberg",
+   "kind": "symbol",
+   "name": "Hessenberg matrix",
+   "latex": "\\bar H_m",
+   "meaning": "Upper Hessenberg matrix of Arnoldi coefficients.",
+   "key": false,
+   "sources": [
+    "b4"
+   ]
+  },
+  {
+   "id": "arnoldi",
+   "kind": "algorithm",
+   "name": "Arnoldi process",
+   "latex": null,
+   "meaning": null,
+   "key": true,
+   "sources": [
+    "b6"
+   ]
+  },
+  {
+   "id": "arnoldi-relation",
+   "kind": "equation",
+   "name": "Arnoldi relation",
+   "latex": null,
+   "meaning": null,
+   "key": true,
+   "sources": [
+    "b5"
+   ]
+  },
+  {
+   "id": "ls-eq",
+   "kind": "equation",
+   "name": "small least-squares problem",
+   "latex": null,
+   "meaning": null,
+   "key": false,
+   "sources": [
+    "b8"
+   ]
+  },
+  {
+   "id": "ls",
+   "kind": "result",
+   "name": "reduction to least squares",
+   "latex": null,
+   "meaning": null,
+   "key": true,
+   "sources": [
+    "b7",
+    "b8",
+    "b9"
+   ]
+  },
+  {
+   "id": "termination",
+   "kind": "result",
+   "name": "finite termination",
+   "latex": null,
+   "meaning": null,
+   "key": false,
+   "sources": [
+    "b10"
+   ]
+  }
+ ],
+ "edges": [
+  {
+   "src": "krylov",
+   "dst": "residual",
+   "rel": "depends_on"
+  },
+  {
+   "src": "gmres",
+   "dst": "krylov",
+   "rel": "depends_on"
+  },
+  {
+   "src": "arnoldi",
+   "dst": "basis",
+   "rel": "defines"
+  },
+  {
+   "src": "arnoldi",
+   "dst": "hessenberg",
+   "rel": "defines"
+  },
+  {
+   "src": "arnoldi",
+   "dst": "krylov",
+   "rel": "depends_on"
+  },
+  {
+   "src": "arnoldi-relation",
+   "dst": "arnoldi",
+   "rel": "depends_on"
+  },
+  {
+   "src": "ls",
+   "dst": "arnoldi-relation",
+   "rel": "depends_on"
+  },
+  {
+   "src": "ls",
+   "dst": "gmres",
+   "rel": "depends_on"
+  },
+  {
+   "src": "ls",
+   "dst": "ls-eq",
+   "rel": "uses"
+  },
+  {
+   "src": "termination",
+   "dst": "gmres",
+   "rel": "depends_on"
+  }
+ ]
+}

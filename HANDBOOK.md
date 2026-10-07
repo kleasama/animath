@@ -125,6 +125,39 @@ a hit returns the stored `DocIR` with zero usage. The orchestrator passes `fetch
 5.8 Performance: pandoc call ≈ 10 ms; `tests/ingest` ≈ 4 s on 4 cores.
 
 ## 6 Knowledge extraction
+
+6.1 Interface. `extract.run(doc, store, llm, retries=3) -> (KnowledgeGraph, Usage)` realizes $\Phi_2$. Stage key
+$$k_{\text{extract}} = d\big([\text{extract}, v, d(\mathcal{D})]\big); \tag{6.1}$$
+a hit returns the stored graph with zero usage. The orchestrator passes `retries` $= N_{\text{retry}}$.
+
+6.2 Modules.
+
+| Module | Content |
+|---|---|
+| `draft` | LLM output schema `Draft` (`DNode`, `DEdge`), system prompt `SYSTEM`, block lines, `chunks`, `prompt` |
+| `graph` | node validation (`node`), fold of a draft into the graph (`merge`) |
+
+6.3 Semantics. Node kinds: concept, symbol (with `latex`, `meaning`), equation (one display), result, algorithm. Edges: $a \xrightarrow{\text{depends\_on}} b$ iff $a$ cannot be understood before $b$; $a \xrightarrow{\text{defines}} b$ iff $a$ introduces $b$; $a \xrightarrow{\text{uses}} b$ otherwise. `Node.sources` are `DocIR` block ids; `key` marks the nodes $\mathcal{K}^\ast$ a video must cover, so $Q_5 = |\{n\in\mathcal{K}^\ast : n \in \bigcup_s \text{nodes}(s)\}| / |\mathcal{K}^\ast|$.
+
+**Algorithm 6.1 (extraction).**
+1. Split $\mathcal{D}$ into sections (heading to heading); pack sections greedily into chunks of at most $C = 4\cdot 10^4$ characters of block lines `[id type env label] latex|text`; a longer section is packed block by block.
+2. For each chunk, in order: prompt = title, macros, known nodes (`id (kind): name`), block lines; `llm.parse(Draft, SYSTEM, prompt)`.
+3. Merge (Algorithm 6.2). On problems, re-prompt with the previous draft and the problem list; at most $N_{\text{retry}}$ repairs, then `ExtractError`.
+4. Store the graph under (6.1).
+
+**Algorithm 6.2 (merge).** For each draft node: reject unless the id matches `[a-z0-9][a-z0-9_-]*`, all sources are block ids, an equation has an equation block among its sources, a symbol has `latex` and `meaning`; an equation's `latex` is replaced by that of its first equation source. A known id with the same kind unites sources and `key`; a different kind is a problem. Edges must join known nodes without self-loops; duplicates are dropped. After the last chunk at least one node is key. The candidate is validated by `KnowledgeGraph` (unique ids, resolved edges, acyclic `depends_on`, Kahn); its errors are problems.
+
+6.4 Golden drafts (`tests/extract/golden/<case>.json`) are hand-written `Draft`s for the IR of §5.6; the test replays each through `Replay` and checks key nodes, sources, equation fidelity and offline reruns.
+
+6.5 Decisions.
+
+| # | Decision | Reason |
+|---|---|---|
+| X1 | Equation node `latex` copied from $\mathcal{D}$, never from the model | $Q_2$ and N1 by construction |
+| X2 | Invalid drafts repaired by the model, not normalized | the graph gates planning (F12); silent drops would hide errors (N4) |
+| X3 | Chunks processed sequentially with a ledger of known nodes | cross-chunk ids and edges; golden documents fit one chunk |
+| X4 | Stage key excludes $\pi$ | audience and focus act in $\Phi_3$ (F4) |
+
 ## 7 Storyboard
 ## 8 Numerics
 
@@ -301,6 +334,7 @@ Segment $i$ is exactly $n_i$ frames and $S_i$ samples; $\sum_i S_i = \operatorna
 | Numerics, largest admissible request per kind | rule convergence 0.8 s; EFIE $ka=50$, $n=2048$ 2.3 s; DLP $n_{\max}=1024$ 3.8 s; GMRES $n=1024$, $m=256$ 1.2 s; CG $n=1024$ 0.4 s |
 | `make check` wall time (WP3) | ≈ 30 s on 4 cores |
 | Draft render, 12 s scene, 8 primitives (`surface` included) | ≈ 10.5 s on 4 cores |
+| `tests/extract` | ≈ 2 s on 4 cores |
 
 ## 14 Decisions log
 
