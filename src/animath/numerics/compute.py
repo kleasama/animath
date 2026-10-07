@@ -8,6 +8,7 @@ from animath.core.hashing import digest_of
 from animath.core.schemas import DataRequest, DataSet
 from animath.core.store import Store
 from animath.numerics.base import Kernel
+from animath.numerics.h2 import RssLu
 from animath.numerics.kernels import DlpEllipse, EfieCylinder
 from animath.numerics.krylov import Cg, Gmres
 from animath.numerics.quadrature import Convergence, Rule
@@ -20,6 +21,7 @@ KINDS: dict[str, type[Kernel]] = {
     "bem.dlp_ellipse": DlpEllipse,
     "krylov.gmres": Gmres,
     "krylov.cg": Cg,
+    "h2.rss": RssLu,
 }
 
 

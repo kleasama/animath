@@ -67,6 +67,7 @@ def test_every_kind_runs_on_defaults(store: Store) -> None:
         "bem.dlp_ellipse": {"n_max": 8},
         "krylov.gmres": {"operator": {"name": "poisson1d", "n": 4}},
         "krylov.cg": {"operator": {"name": "convdiff", "n": 4, "peclet": 0.0}},
+        "h2.rss": {"n": 64, "leaf": 16},
     }
     assert minimal.keys() == KINDS.keys()
     for kind, params in minimal.items():
