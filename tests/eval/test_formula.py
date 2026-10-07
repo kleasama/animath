@@ -10,6 +10,9 @@ from animath.eval import formula
         (r"\left( x^{2} \right)\,+\alpha x.", r"(x^2)+\alpha x"),
         (r"\displaystyle a_{i}\quad=b", "a_i = b"),
         (r"\Bigl( a \Bigr) ;", "(a)"),
+        (r"\mathrm{d}x", r"\mathrm dx"),
+        (r"\frac{1}{\sqrt{3}}", r"\frac1{\sqrt3}"),
+        (r"a &= b", "a = b"),
     ],
 )
 def test_normalize_equal(a: str, b: str) -> None:
@@ -88,3 +91,24 @@ def test_untraced() -> None:
     )
     board = Storyboard(title="t", scenes=(s,))
     assert formula.untraced(board, src) == (6, ["z", "q"])
+
+
+def test_untraced_parts_inline_markers() -> None:
+    src = DocIR(
+        title="t",
+        blocks=(
+            Block(id="e", type=BlockType.EQUATION, latex=r"a=\langle f,g\rangle,\quad x=y+z,"),
+            Block(id="p", type=BlockType.PARAGRAPH, text=r"Here $G(r,s)=\mathrm e^{r}$ holds."),
+        ),
+    )
+    steps = ["x=y+z", r"\mathbf E^{\mathrm{inc}}", "{{x}}=y+{{z}}"]
+    s = Scene(
+        id="s",
+        goal="g",
+        narration=(Line(text="w"),),
+        visuals=(Visual(primitive="derive", args={"steps": steps}),),
+        math=(r"a=\langle f,g\rangle", r"G(r,s)=\mathrm{e}^{r}", "x=y", r"\langle f"),
+        duration_s=1,
+    )
+    board = Storyboard(title="t", scenes=(s,))
+    assert formula.untraced(board, src) == (7, ["x=y", r"\langle f", r"\mathbf E^{\mathrm{inc}}"])

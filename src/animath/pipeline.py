@@ -188,11 +188,16 @@ def bundle(path: Path, params: Params, store: Store, page_spec: str | None = Non
         paths = [path, *sorted(root.glob("*.bib"))]
     else:
         paths = sorted(
-            p
-            for p in root.rglob("*")
-            if p.is_file()
-            and p.suffix in LATEX_FILES
-            and not any(x.startswith(".") for x in p.relative_to(root).parts)
+            {
+                path,
+                *(
+                    p
+                    for p in root.rglob("*")
+                    if p.is_file()
+                    and p.suffix in LATEX_FILES
+                    and not any(x.startswith(".") for x in p.relative_to(root).parts)
+                ),
+            }
         )
     try:
         data = {p: p.read_bytes() for p in paths}

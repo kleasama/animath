@@ -15,7 +15,9 @@ def goto(cursor: Mobject, row: Mobject) -> Animation:
 
 
 class TraceArgs(Args):
-    lines: list[str] = Field(min_length=1)
+    lines: list[str] = Field(
+        min_length=1, description="plain monospace text, not TeX; leading spaces indent"
+    )
     steps: list[int] = Field(min_length=1)
 
     @model_validator(mode="after")

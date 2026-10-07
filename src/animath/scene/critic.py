@@ -14,6 +14,7 @@ from animath.core.schemas import Model, Scene, SceneRender, Usage
 from animath.core.store import Store
 from animath.llm import LLM
 from animath.scene.layout import GRID, Region, cell, frame
+from animath.scene.primitives.tex import Derive, DeriveArgs
 from animath.scene.render import DRAFT_FPS, EXIT_S, FRAME_HEIGHT
 
 KEYFRAMES = 6
@@ -45,12 +46,30 @@ def spans(scene: Scene, times: dict[str, float], duration: float) -> list[tuple[
 def keyframes(
     scene: Scene, times: dict[str, float], duration: float, fps: int, k: int = KEYFRAMES
 ) -> list[tuple[int, list[int]]]:
-    """Frame before exits of each change of the visual set, with the visuals alive; at most k."""
+    """Last still frame (no entry, derivation step or exit playing) between consecutive changes
+    of the visual set or derivation steps, with the visuals alive; at most k."""
     sp = spans(scene, times, duration)
-    cuts = sorted({round(t * fps) for s in sp for t in s} | {0, round(duration * fps)})
+    steps = [
+        t
+        for v, (t0, t1) in zip(scene.visuals, sp, strict=True)
+        if v.primitive == Derive.name
+        for t in Derive.times(len(DeriveArgs.model_validate(v.args).steps), t0, t1)[1:]
+    ]
+    moving = [(t, t + ENTRY_S) for t in [*steps, *(t0 for t0, _ in sp)]] + [
+        (max(t0, t1 - EXIT_S), t1)
+        for v, (t0, t1) in zip(scene.visuals, sp, strict=True)
+        if isinstance(v.args.get("until"), str)
+    ]
+    still = np.ones(round(duration * fps), dtype=bool)
+    for u, w in moving:
+        still[round(u * fps) : round(w * fps)] = False
+    cuts = sorted({0, len(still), *(round(t * fps) for t in [*steps, *(t for s in sp for t in s)])})
     out = []
     for a, b in pairwise(cuts):
-        n = max(a, b - 1 - round(EXIT_S * fps))
+        idle = np.flatnonzero(still[a:b])
+        if not idle.size:
+            continue
+        n = a + int(idle[-1])
         live = [i for i, (t0, t1) in enumerate(sp) if round(t0 * fps) <= n < round(t1 * fps)]
         if live:
             out.append((n, live))
@@ -102,15 +121,11 @@ def critique(scene: Scene, draft: SceneRender, store: Store, llm: LLM) -> tuple[
         return f"{scene.id}.{i}:{scene.visuals[i].primitive}"
 
     regions = [_region(v.args) for v in scene.visuals]
-    entered = [
-        round((t0 + ENTRY_S) * DRAFT_FPS)
-        for t0, _ in spans(scene, draft.bookmarks, draft.duration_s)
-    ]
     out = [
         f"{name(i)}: nothing visible in region {regions[i]} at t={n / DRAFT_FPS:.2f} s"
         for (n, live), img in zip(kf, imgs, strict=True)
         for i in live
-        if n >= entered[i] and blank(img, regions[i])
+        if blank(img, regions[i])
     ]
     if out:
         return out, Usage()

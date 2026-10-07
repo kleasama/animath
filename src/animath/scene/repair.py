@@ -4,6 +4,7 @@ import re
 from pydantic import Field, ValidationError
 
 from animath.core.errors import AnimateError
+from animath.core.hashing import digest_of
 from animath.core.schemas import Model, Scene, Usage, Visual
 from animath.core.store import Store
 from animath.llm import LLM
@@ -109,7 +110,12 @@ def repair(
         "repair": allowed,
         "pitfalls": pitfalls(store, [scene.visuals[i].primitive for i in allowed]),
     }
-    patch, usage = llm.parse(Patch, SYSTEM, json.dumps(task, indent=1, sort_keys=True))
+    key = digest_of([SYSTEM, scene.model_dump(mode="json"), errors])
+    if (d := store.ref("repair", key)) is not None:
+        patch, usage = Patch.model_validate_json(store.get_blob(d)), Usage()
+    else:
+        patch, usage = llm.parse(Patch, SYSTEM, json.dumps(task, indent=1, sort_keys=True))
+        store.set_ref("repair", key, store.put_blob(patch.model_dump_json().encode()))
     try:
         return apply(scene, patch, allowed), [], usage
     except AnimateError as e:
