@@ -9,12 +9,15 @@ description = "Mathematical source to educational video."
 requires-python = ">=3.12"
 dependencies = [
     "anthropic>=1.11,<2",
-    "numpy>=2.3",
+    "manim>=0.21,<0.22",
+    "matplotlib>=3.10,<4",
+    "numpy>=2.3,<3",
     "onnxruntime>=1.23",
     "pillow>=12.3,<13",
     "pydantic>=2.13,<3",
     "pypandoc-binary>=1.17,<2",
     "pypdfium2>=5.14,<6",
+    "pyvista>=0.49,<0.50",
     "scipy>=1.16",
 ]
 

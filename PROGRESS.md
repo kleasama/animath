@@ -27,6 +27,10 @@ Legend: ✓ done · ✱ in progress · ○ open · ⏸ checkpoint (review, commi
 | 2.6 | WP3 scene: primitive library (equation, derivation step, matrix, plot, field, algorithm trace) | ○ |
 | 2.7 | WP3 scene: layout checker, renderer wrapper, PyVista bridge | ○ |
 | 2.8 | WP4 narrate: SRE verbalization, Kokoro and espeak-ng TTS, bookmark timeline, VTT | ✓ |
+| 2.5 | WP2 numerics: quadrature, Krylov with trace capture, MoM/BEM toy kernels (Numba), data cache | ○ |
+| 2.6 | WP3 scene: primitive library (equation, derivation step, matrix, plot, field, algorithm trace) | ✓ |
+| 2.7 | WP3 scene: layout checker, renderer wrapper, PyVista bridge | ✓ |
+| 2.8 | WP4 narrate: SRE verbalization, Kokoro service, forced alignment, VTT | ○ |
 | 2.9 | WP5 assemble: concat, loudnorm, encode, manifest | ○ |
 | ⏸ C2 | Stage modules review; integrate group B | ○ |
 | 3.1 | WP6 extract: $\mathcal{K}$ with provenance | ○ |
@@ -48,6 +52,7 @@ Legend: ✓ done · ✱ in progress · ○ open · ⏸ checkpoint (review, commi
 | C1 | Container: 4 cores, 15 GB RAM, no GPU, no TeX preinstalled (apt available), ffmpeg 6.1, pandoc 3.1. GPU parsers, GROBID, Typst, Blender, AV1, WhisperX trimmed (SPEC §6.3). |
 | 1.1–1.8 | 41 tests, 100% line+branch coverage, mypy strict clean, licence audit clean. |
 | 1.7 | Dockerfile not built: no container runtime in the session. |
+| 2.6–2.7 | 8 primitives (`text`, `equation`, `derive`, `matrix`, `plot`, `field`, `surface`, `trace`); grid layout check; frame-exact scheduler; deterministic clips. 100% coverage of `scene/`. Handbook §9. |
 | C1 | Code moved to GitHub `kleasama/animath` (user decision). Tag push is refused by the session's git proxy; checkpoints are recorded by commit hash. |
 | 2.8 | Per-line synthesis replaces forced alignment (HANDBOOK 10.7). Kokoro untested with real weights: Hugging Face blocked in containers. |
 

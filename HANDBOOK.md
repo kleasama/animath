@@ -168,7 +168,64 @@ $$\frac{\|e_k\|_A}{\|e_0\|_A} \le 2\Big(\frac{\sqrt\kappa-1}{\sqrt\kappa+1}\Big)
 
 8.7 Implementation notes. Dense NumPy/SciPy, vectorized assembly; all kernels are deterministic and side-effect free, so concurrent `compute` calls are safe (store writes are atomic, §3.4). Numba is deferred until a profile demands it (D7). Matrix symbols ($A$, $H$, $R$, $V$) keep textbook case; `N803`/`N806` are silenced per file.
 ## 9 Scenes and rendering
+
 Algorithm 9.1 Scene generation: SPEC Algorithm 6.1.
+
+9.1 Modules. `scene.layout` (geometry, no Manim), `scene.primitives` (registry `PRIMITIVES`, `catalog()` of argument JSON schemas), `scene.render` (`timeline`, `compose`, `schedule`, `render`).
+
+9.2 Primitives. A `Visual` names a primitive and carries its arguments; every argument model extends `Args` with `region` (default `main`) and `until` (bookmark that removes the visual). Numerical arguments are literals or `ArrayRef` $(i, a)$: array $a$ of the `DataSet` answering `scene.data[i]`, stored as one `.npy` blob and loaded with `allow_pickle=False`. Complex arrays must select `part` $\in$ {`abs`, `real`, `imag`} wherever a real array is drawn (`plot`, `field`, `surface`); `matrix` takes complex input directly.
+
+| Primitive | Arguments | Visual | Cues |
+|---|---|---|---|
+| `text` | `text` (LaTeX text mode) | `Tex` | write |
+| `equation` | `latex` | `MathTex` | write |
+| `derive` | `steps` ($\ge 2$; `{{...}}` marks matched parts) | `MathTex` chain | write, then `TransformMatchingTex` at $t_0 + k(t_1-t_0)/n$ |
+| `matrix` | `entries` (strings or `ArrayRef`) | entries if $\max(m,n) \le 8$, else heatmap of $\log_{10}\lvert a_{ij}\rvert$ | write or fade in |
+| `plot` | `series` ($\le 5$; `x`, `y`, `label`), `xlabel`, `ylabel`, `logy` | `Axes`, line graphs, legend | write |
+| `field` | `values` $u_{ij}$ at $(x_j, y_i)$, $y$ upward | viridis heatmap | fade in |
+| `surface` | `points` $(n,3)$, `faces` $(m,3)$, `scalars` $(n)$ or $(m)$, `azimuth`, `elevation` | PyVista offscreen image | fade in |
+| `trace` | `lines`, `steps` (line indices) | monospace listing, cursor | write, then cursor to line `steps[i]` at $t_0 + i(t_1-t_0)/n$ |
+
+9.3 Semantic grid. For frame $F = [-W/2, W/2] \times [-H/2, H/2]$, $H = 8$, $W = 8w/h$, a region with normalized box $(u_0, v_0, u_1, v_1)$ occupies
+$$C = [-W/2 + u_0 W,\; -W/2 + u_1 W] \times [-H/2 + v_0 H,\; -H/2 + v_1 H]. \tag{9.1}$$
+
+| Region | $(u_0, v_0, u_1, v_1)$ |
+|---|---|
+| `title` | (0.04, 0.86, 0.96, 0.97) |
+| `main` | (0.04, 0.14, 0.96, 0.84) |
+| `left` | (0.04, 0.14, 0.49, 0.84) |
+| `right` | (0.51, 0.14, 0.96, 0.84) |
+| `footer` | (0.04, 0.03, 0.96, 0.12) |
+
+`left` and `right` partition `main`; using either with `main` at the same time is a conflict.
+
+9.4 Fit. A mobject of size $w \times h$ in cell $C$ is scaled by
+$$s = \min\big(1,\; w_C / w,\; h_C / h\big) \tag{9.2}$$
+and centred in $C$. Raster primitives are built at cell height.
+
+9.5 Layout check. A placement is $p = (B_p, [t_0, t_1), s_p)$ with $B_p$ the measured bounding box. The layout is rejected (`AnimateError`) iff for some $p$: $B_p \not\subseteq F$, or $s_p < s_{\min} = 0.4$; or for some $p \ne q$:
+$$[t_0^p, t_1^p) \cap [t_0^q, t_1^q) \ne \emptyset \;\wedge\; \lvert B_p \cap B_q \rvert > 0. \tag{9.3}$$
+Placements are static between cues and exits end at $t_1$, so (9.3) at keyframes covers every interpolated frame.
+
+9.6 Timeline. With narration, bookmark times $\tau_b$ and duration $T$ are taken from `Narration` (every scene bookmark must be present). Without, line $i$ of $n$ starts at
+$$\tau_i = iT/n, \quad T = \texttt{duration\_s}. \tag{9.4}$$
+A visual lives on $[t_0, t_1)$ with $t_0 = \tau_{\texttt{at}}$ (else 0) and $t_1 = \tau_{\texttt{until}}$ (else $T$); its exit fades over $[\max(t_0, t_1 - 0.5), t_1)$.
+
+**Algorithm 9.2 (schedule).** Input cues $(t_k, r_k)$, frame rate $f$.
+1. $n_k = \operatorname{round}(t_k f)$; drop cues with $n_k \ge \operatorname{round}(Tf)$.
+2. Group cues by $n_k$; let $n^{(1)} < \dots < n^{(g)}$, $n^{(g+1)} = \operatorname{round}(Tf)$.
+3. Group $j$ plays from $n^{(j)}/f$ for $\max\big(1, \min(\operatorname{round}(f \max_k r_k),\, n^{(j+1)} - n^{(j)})\big)/f$.
+4. Waits fill gaps to the next absolute frame.
+
+Every cue starts on its own frame, so $Q_3 \le 1/(2f)$, and the clip has exactly $\operatorname{round}(Tf)$ frames.
+
+9.7 Rendering. `render(scene, params, store, narration, datasets, draft)` sets Manim's configuration inside `tempconfig`, renders into a temporary directory removed on exit, stores the silent H.264 clip as a blob, and returns `SceneRender` with `checks = {layout, render}`. Draft: 240 px height, 15 fps. Output is byte-identical across runs. Manim's global configuration and VTK make `render` thread-unsafe; parallelize over processes.
+
+9.8 Implementation notes.
+1. `manim.Scene.play` overwrites `self.duration`; the clip end time is kept in `Clip.t_end`.
+2. PyVista renders through OSMesa (`VTK_DEFAULT_OPENGL_WINDOW=vtkOSOpenGLRenderWindow`, set if absent); requires `libosmesa6`.
+3. Build failures (e.g. LaTeX errors) are re-raised as `AnimateError` naming `scene.visual:primitive`, for the WP8 repair loop.
+4. Tests run Manim under `tempconfig` with a temporary `media_dir`; nothing is written to the working tree.
 ## 10 Narration
 
 10.1 $\Phi_6$ maps each scene $s$ with lines $\ell_1,\dots,\ell_m$ to a `Narration`. Entry: `narrate.narrate(board, store, tts, verbalizer, workers) -> {scene id: digest}`.
@@ -242,6 +299,8 @@ Segment $i$ is exactly $n_i$ frames and $S_i$ samples; $\sum_i S_i = \operatorna
 | `make check` wall time (WP5) | ≈ 12 s on 4 cores |
 | Assembly, 3 × 10 s 1080p60 clips, $p=4$ | 34 s (1.15 × real time) |
 | Numerics, largest admissible request per kind | rule convergence 0.8 s; EFIE $ka=50$, $n=2048$ 2.3 s; DLP $n_{\max}=1024$ 3.8 s; GMRES $n=1024$, $m=256$ 1.2 s; CG $n=1024$ 0.4 s |
+| `make check` wall time (WP3) | ≈ 30 s on 4 cores |
+| Draft render, 12 s scene, 8 primitives (`surface` included) | ≈ 10.5 s on 4 cores |
 
 ## 14 Decisions log
 
