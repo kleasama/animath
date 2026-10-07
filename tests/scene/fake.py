@@ -16,4 +16,4 @@ class Fake:
         self, schema: type[M], system: str, prompt: str, images: Sequence[bytes] = ()
     ) -> tuple[M, Usage]:
         self.calls.append((schema.__name__, prompt, images))
-        return schema.model_validate(self.outs.pop(0).model_dump()), Usage()
+        return schema.model_validate(self.outs.pop(0).model_dump()), Usage(input_tokens=1)

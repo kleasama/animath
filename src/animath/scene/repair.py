@@ -4,7 +4,7 @@ import re
 from pydantic import Field, ValidationError
 
 from animath.core.errors import AnimateError
-from animath.core.schemas import Model, Scene, Visual
+from animath.core.schemas import Model, Scene, Usage, Visual
 from animath.core.store import Store
 from animath.llm import LLM
 from animath.scene.codegen import CodeArgs, api
@@ -91,8 +91,11 @@ def apply(scene: Scene, patch: Patch, allowed: list[int]) -> Scene:
         raise AnimateError(f"scene {scene.id}: patched scene invalid: {e}") from e
 
 
-def repair(scene: Scene, errors: list[str], llm: LLM, store: Store) -> Scene:
-    """Localized repair: visuals named by the errors, else the whole scene."""
+def repair(
+    scene: Scene, errors: list[str], llm: LLM, store: Store
+) -> tuple[Scene, list[str], Usage]:
+    """Localized repair: visuals named by the errors, else the whole scene. A rejected patch
+    leaves the scene unchanged and is returned as an error."""
     allowed = sorted({i for e in errors for i in indices(scene, e)}) or list(
         range(len(scene.visuals))
     )
@@ -106,5 +109,8 @@ def repair(scene: Scene, errors: list[str], llm: LLM, store: Store) -> Scene:
         "repair": allowed,
         "pitfalls": pitfalls(store, [scene.visuals[i].primitive for i in allowed]),
     }
-    patch, _ = llm.parse(Patch, SYSTEM, json.dumps(task, indent=1, sort_keys=True))
-    return apply(scene, patch, allowed)
+    patch, usage = llm.parse(Patch, SYSTEM, json.dumps(task, indent=1, sort_keys=True))
+    try:
+        return apply(scene, patch, allowed), [], usage
+    except AnimateError as e:
+        return scene, [str(e)], usage

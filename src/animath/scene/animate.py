@@ -4,7 +4,7 @@ from collections.abc import Mapping
 
 from animath.core.errors import AnimateError
 from animath.core.hashing import digest_of
-from animath.core.schemas import DataSet, Narration, Params, Scene, SceneRender
+from animath.core.schemas import DataSet, Narration, Params, Scene, SceneRender, Usage
 from animath.core.store import Store
 from animath.llm import LLM
 from animath.scene.codegen import CODE, gate, registered
@@ -24,7 +24,7 @@ def check(
     store: Store,
     llm: LLM,
     params: Params,
-) -> list[str]:
+) -> tuple[list[str], Usage]:
     """Static gate, draft render, critic; first failing step's errors."""
     errors = [
         f"{s.id}.{i}:{CODE.name}: {e}"
@@ -33,11 +33,11 @@ def check(
         for e in gate(str(v.args.get("code", "")))
     ]
     if errors:
-        return errors
+        return errors, Usage()
     try:
         draft = render(s, params, store, narration, data, draft=True)
     except AnimateError as e:
-        return [str(e)]
+        return [str(e)], Usage()
     return critique(s, draft, store, llm)
 
 
@@ -48,8 +48,8 @@ def animate(
     store: Store,
     llm: LLM,
     params: Params,
-) -> SceneRender:
-    """Algorithm 9.3; skipped iff a SceneRender is indexed under the stage key. Not thread-safe;
+) -> tuple[SceneRender, Usage]:
+    """Algorithm 9.3 with the usage of all LLM calls; Usage() on a stage key hit. Not thread-safe;
     parallelize over processes."""
     inputs = [digest_of(data[r.digest]) if r.digest in data else None for r in scene.data]
     key = Store.key(
@@ -65,8 +65,8 @@ def animate(
         ),
     )
     if (hit := store.lookup(SceneRender, key)) is not None:
-        return hit
-    s = scene
+        return hit, Usage()
+    s, usage = scene, Usage()
     with registered():
         errors = [
             f"{s.id}.{i}:{v.primitive}: not a catalog primitive; implement it as `{CODE.name}`"
@@ -75,18 +75,19 @@ def animate(
         ]
         for _ in range(params.max_retries + 1):
             if errors:
-                try:
-                    s = repair(s, errors, llm, store)
-                except AnimateError as e:
-                    errors = [*errors, str(e)]
+                s, bad, u = repair(s, errors, llm, store)
+                usage += u
+                if bad:
+                    errors = [*errors, *bad]
                     continue
-            errors = check(s, data, narration, store, llm, params)
+            errors, u = check(s, data, narration, store, llm, params)
+            usage += u
             if not errors:
                 out = render(s, params, store, narration, data)
                 out = out.model_copy(
                     update={"checks": {**out.checks, "static": True, "critic": True}}
                 )
                 store.put(out, key)
-                return out
+                return out, usage
             record(store, s, errors)
     raise AnimateError(f"scene {scene.id}: unresolved after {params.max_retries} repairs: {errors}")

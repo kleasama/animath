@@ -311,7 +311,7 @@ Every cue starts on its own frame, so $Q_3 \le 1/(2f)$, and the clip has exactly
 3. Build failures (e.g. LaTeX errors) are re-raised as `AnimateError` naming `scene.visual:primitive`, for the WP8 repair loop.
 4. Tests run Manim under `tempconfig` with a temporary `media_dir`; nothing is written to the working tree.
 
-9.9 Scene generation (WP8). `scene.animate.animate(scene, data, narration, store, llm, params) -> SceneRender` realizes $\Phi_5$; `data` maps request digests to `DataSet`. With $\pi_5$ = (`width`, `height`, `fps`, `max_retries`) and $D_s = [d(\text{DataSet of } r) \text{ or null} : r \in \texttt{scene.data}]$,
+9.9 Scene generation (WP8). `scene.animate(scene, data, narration, store, llm, params) -> (SceneRender, Usage)` realizes $\Phi_5$; `data` maps request digests to `DataSet`; `Usage` sums every LLM call of the invocation (codegen, repair, critic) and is zero on a key hit. With $\pi_5$ = (`width`, `height`, `fps`, `max_retries`) and $D_s = [d(\text{DataSet of } r) \text{ or null} : r \in \texttt{scene.data}]$,
 $$k_{\text{animate}} = d\big([\texttt{animate}, v, d(s), d([D_s, d(\text{Narration}) \text{ or null}, \pi_5])]\big). \tag{9.5}$$
 
 | Module | Content |
@@ -323,7 +323,7 @@ $$k_{\text{animate}} = d\big([\texttt{animate}, v, d(s), d([D_s, d(\text{Narrati
 
 **Algorithm 9.3 (animate).** Key hit $\Rightarrow$ return. Else, with `code` registered:
 1. $E$ ← visuals whose primitive is not in `PRIMITIVES` (codegen requests).
-2. For at most $N_{\text{retry}}+1$ rounds: if $E \ne \emptyset$, patch $s$ by `repair` (an invalid patch appends its error to $E$ and ends the round); $E$ ← first non-empty of: static gate of every `code` visual; draft render (`AnimateError`); critic. If $E = \emptyset$: final render, store under (9.5), return. Else record $E$ in pitfall memory.
+2. For at most $N_{\text{retry}}+1$ rounds: if $E \ne \emptyset$, patch $s$ by `repair` (a rejected patch leaves $s$ unchanged, appends its error to $E$ and ends the round); $E$ ← first non-empty of: static gate of every `code` visual; draft render (`AnimateError`); critic. If $E = \emptyset$: final render, store under (9.5), return. Else record $E$ in pitfall memory.
 3. Exhaustion raises `AnimateError` with the last $E$.
 
 Hence at most $N_{\text{retry}}$ repairs follow the first check; codegen is the repair of round 1.
@@ -341,8 +341,7 @@ i.e. after entries and before exits, kept if a visual is alive; at most 6, evenl
 9.14 Notes.
 1. `animate` registers `code` in `PRIMITIVES` for its duration; with the renderer this makes it thread-unsafe: parallelize scenes over processes (WP9). `scene.catalog()` stays free of `code`, so the planner never emits it.
 2. LaTeX precompile is the build phase of the draft render: `compose` builds every mobject before any frame, and build errors are localized.
-3. `animate` returns no `Usage` (frozen interface); LLM usage of $\Phi_5$ is not in the manifest.
-4. Unit tests use a queued fake LLM (`tests/scene/fake.py`); no network.
+3. Unit tests use a queued fake LLM (`tests/scene/fake.py`); no network.
 ## 10 Narration
 
 10.1 $\Phi_6$ maps each scene $s$ with lines $\ell_1,\dots,\ell_m$ to a `Narration`. Entry: `narrate.narrate(board, store, tts, verbalizer, workers) -> {scene id: digest}`.

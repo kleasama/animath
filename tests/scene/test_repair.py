@@ -70,7 +70,8 @@ def test_apply_rejects(f: Fix, match: str) -> None:
 def test_repair_localizes(store: Store) -> None:
     record(store, S, ["s.1:text: old"])
     llm = Fake(Patch(fixes=[fix(1)]))
-    out = repair(S, ["s.1:text: build failed: bad"], llm, store)
+    out, bad, usage = repair(S, ["s.1:text: build failed: bad"], llm, store)
+    assert (bad, usage.input_tokens) == ([], 1)
     assert out.visuals[1].primitive == "equation"
     ((name, prompt, images),) = llm.calls
     task = json.loads(prompt)
@@ -83,6 +84,13 @@ def test_repair_whole_scene(store: Store) -> None:
     llm = Fake(Patch(fixes=[fix(0)]))
     repair(S, ["scene s: render failed: x"], llm, store)
     assert json.loads(llm.calls[0][1])["repair"] == [0, 1]
+
+
+def test_repair_rejected_patch(store: Store) -> None:
+    out, bad, usage = repair(S, ["s.1:text: x"], Fake(Patch(fixes=[fix(0)])), store)
+    assert out is S
+    assert bad == ["scene s: patch touches visual 0, not in [1]"]
+    assert usage.input_tokens == 1
 
 
 def test_system_prompt() -> None:

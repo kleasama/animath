@@ -6,7 +6,7 @@ import pytest
 from PIL import Image
 
 from animath.core.errors import AnimateError
-from animath.core.schemas import Narration, Params, SceneRender, Visual
+from animath.core.schemas import Narration, Params, SceneRender, Usage, Visual
 from animath.core.store import Store
 from animath.scene.codegen import registered
 from animath.scene.critic import Issue, Verdict, blank, critique, frames, keyframes, png
@@ -72,8 +72,9 @@ def test_critique_vlm(draft: tuple[Store, SceneRender]) -> None:
         Issue(visual=9, problem="odd"),
     )
     llm = Fake(Verdict(), Verdict(issues=issues))
-    assert critique(S, d, store, llm) == []
-    assert critique(S, d, store, llm) == ["s.1:text: clipped", "scene s: dull", "scene s: odd"]
+    assert critique(S, d, store, llm) == ([], Usage(input_tokens=1))
+    out, _ = critique(S, d, store, llm)
+    assert out == ["s.1:text: clipped", "scene s: dull", "scene s: odd"]
     name, prompt, images = llm.calls[0]
     assert name == "Verdict"
     assert len(images) == 2
@@ -87,7 +88,10 @@ def test_critique_blank_skips_vlm(tmp_path: Path) -> None:
     with registered():
         d = render(s, Params(), store, draft=True)
     llm = Fake()
-    assert critique(s, d, store, llm) == ["s.0:code: nothing visible in region main at t=3.40 s"]
+    assert critique(s, d, store, llm) == (
+        ["s.0:code: nothing visible in region main at t=3.40 s"],
+        Usage(),
+    )
     assert llm.calls == []
 
 
@@ -99,5 +103,4 @@ def test_critique_ignores_entering_visuals(tmp_path: Path) -> None:
     with registered():
         d = render(s, Params(), store, nar, draft=True)
     llm = Fake(Verdict())
-    assert critique(s, d, store, llm) == []
-    assert len(llm.calls) == 1
+    assert critique(s, d, store, llm) == ([], Usage(input_tokens=1))

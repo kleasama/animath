@@ -10,7 +10,7 @@ from PIL import Image
 from pydantic import Field
 
 from animath.core.errors import AnimateError
-from animath.core.schemas import Model, Scene, SceneRender
+from animath.core.schemas import Model, Scene, SceneRender, Usage
 from animath.core.store import Store
 from animath.llm import LLM
 from animath.scene.layout import GRID, Region, cell, frame
@@ -91,7 +91,7 @@ def _region(args: dict[str, Any]) -> Region:
     return r if r in GRID else "main"
 
 
-def critique(scene: Scene, draft: SceneRender, store: Store, llm: LLM) -> list[str]:
+def critique(scene: Scene, draft: SceneRender, store: Store, llm: LLM) -> tuple[list[str], Usage]:
     """Content check of entered visuals in their cells, then a VLM pass on keyframes."""
     kf = keyframes(scene, draft.bookmarks, draft.duration_s, DRAFT_FPS)
     imgs = frames(str(store.blob_path(draft.clip)), [n for n, _ in kf])
@@ -113,7 +113,7 @@ def critique(scene: Scene, draft: SceneRender, store: Store, llm: LLM) -> list[s
         if n >= entered[i] and blank(img, regions[i])
     ]
     if out:
-        return out
+        return out, Usage()
     task = {
         "goal": scene.goal,
         "narration": [ln.text for ln in scene.narration],
@@ -131,7 +131,7 @@ def critique(scene: Scene, draft: SceneRender, store: Store, llm: LLM) -> list[s
             for j, (n, live) in enumerate(kf)
         ],
     }
-    verdict, _ = llm.parse(
+    verdict, usage = llm.parse(
         Verdict, SYSTEM, json.dumps(task, indent=1, sort_keys=True), images=[png(i) for i in imgs]
     )
-    return [f"{name(x.visual)}: {x.problem}" for x in verdict.issues]
+    return [f"{name(x.visual)}: {x.problem}" for x in verdict.issues], usage
