@@ -1,0 +1,162 @@
+{
+ "nodes": [
+  {
+   "id": "pec",
+   "kind": "concept",
+   "name": "perfectly conducting surface",
+   "latex": null,
+   "meaning": null,
+   "key": false,
+   "sources": [
+    "b1"
+   ]
+  },
+  {
+   "id": "current",
+   "kind": "symbol",
+   "name": "surface current",
+   "latex": "\\mathbf J",
+   "meaning": "Unknown electric surface current density on $S$.",
+   "key": false,
+   "sources": [
+    "b1"
+   ]
+  },
+  {
+   "id": "green",
+   "kind": "symbol",
+   "name": "Green's function",
+   "latex": "G(\\mathbf r,\\mathbf r')",
+   "meaning": "Free-space scalar Green's function of the Helmholtz equation.",
+   "key": false,
+   "sources": [
+    "b3"
+   ]
+  },
+  {
+   "id": "t-op",
+   "kind": "symbol",
+   "name": "EFIE operator",
+   "latex": "\\mathcal T",
+   "meaning": "Integral operator mapping a surface current to its scattered tangential field.",
+   "key": false,
+   "sources": [
+    "b2"
+   ]
+  },
+  {
+   "id": "efie",
+   "kind": "equation",
+   "name": "electric field integral equation",
+   "latex": null,
+   "meaning": null,
+   "key": true,
+   "sources": [
+    "b2"
+   ]
+  },
+  {
+   "id": "rwg",
+   "kind": "concept",
+   "name": "RWG basis functions",
+   "latex": null,
+   "meaning": null,
+   "key": false,
+   "sources": [
+    "b5"
+   ]
+  },
+  {
+   "id": "galerkin",
+   "kind": "concept",
+   "name": "Galerkin testing",
+   "latex": null,
+   "meaning": null,
+   "key": false,
+   "sources": [
+    "b5"
+   ]
+  },
+  {
+   "id": "mom",
+   "kind": "equation",
+   "name": "moment system",
+   "latex": null,
+   "meaning": null,
+   "key": true,
+   "sources": [
+    "b6"
+   ]
+  },
+  {
+   "id": "uniqueness",
+   "kind": "result",
+   "name": "uniqueness of the EFIE solution",
+   "latex": null,
+   "meaning": null,
+   "key": true,
+   "sources": [
+    "b7"
+   ]
+  },
+  {
+   "id": "cost",
+   "kind": "concept",
+   "name": "cost of a direct solution",
+   "latex": null,
+   "meaning": null,
+   "key": false,
+   "sources": [
+    "b8",
+    "b9"
+   ]
+  }
+ ],
+ "edges": [
+  {
+   "src": "efie",
+   "dst": "current",
+   "rel": "depends_on"
+  },
+  {
+   "src": "efie",
+   "dst": "green",
+   "rel": "depends_on"
+  },
+  {
+   "src": "efie",
+   "dst": "t-op",
+   "rel": "defines"
+  },
+  {
+   "src": "efie",
+   "dst": "pec",
+   "rel": "uses"
+  },
+  {
+   "src": "mom",
+   "dst": "efie",
+   "rel": "depends_on"
+  },
+  {
+   "src": "mom",
+   "dst": "rwg",
+   "rel": "depends_on"
+  },
+  {
+   "src": "mom",
+   "dst": "galerkin",
+   "rel": "depends_on"
+  },
+  {
+   "src": "uniqueness",
+   "dst": "t-op",
+   "rel": "depends_on"
+  },
+  {
+   "src": "cost",
+   "dst": "mom",
+   "rel": "depends_on"
+  }
+ ]
+}

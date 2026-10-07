@@ -1,0 +1,140 @@
+{
+ "nodes": [
+  {
+   "id": "legendre",
+   "kind": "symbol",
+   "name": "Legendre polynomial",
+   "latex": "P_n",
+   "meaning": "Legendre polynomial of degree $n$ on $[-1,1]$.",
+   "key": false,
+   "sources": [
+    "b3"
+   ]
+  },
+  {
+   "id": "nodes",
+   "kind": "symbol",
+   "name": "Gauss nodes",
+   "latex": "x_i",
+   "meaning": "Zeros of $P_n$.",
+   "key": false,
+   "sources": [
+    "b3"
+   ]
+  },
+  {
+   "id": "weights",
+   "kind": "equation",
+   "name": "Gauss weights",
+   "latex": null,
+   "meaning": null,
+   "key": false,
+   "sources": [
+    "b4"
+   ]
+  },
+  {
+   "id": "rule",
+   "kind": "equation",
+   "name": "Gauss–Legendre rule",
+   "latex": null,
+   "meaning": null,
+   "key": true,
+   "sources": [
+    "b2"
+   ]
+  },
+  {
+   "id": "error",
+   "kind": "equation",
+   "name": "error term",
+   "latex": null,
+   "meaning": null,
+   "key": false,
+   "sources": [
+    "b6"
+   ]
+  },
+  {
+   "id": "exactness",
+   "kind": "result",
+   "name": "degree of exactness and error",
+   "latex": null,
+   "meaning": null,
+   "key": true,
+   "sources": [
+    "b5",
+    "b6"
+   ]
+  },
+  {
+   "id": "jacobi",
+   "kind": "symbol",
+   "name": "Jacobi matrix",
+   "latex": "J_n",
+   "meaning": "Symmetric tridiagonal matrix of the Legendre recurrence coefficients.",
+   "key": false,
+   "sources": [
+    "b8"
+   ]
+  },
+  {
+   "id": "golub-welsch",
+   "kind": "algorithm",
+   "name": "eigenvalue computation of the rule",
+   "latex": null,
+   "meaning": null,
+   "key": true,
+   "sources": [
+    "b8"
+   ]
+  }
+ ],
+ "edges": [
+  {
+   "src": "nodes",
+   "dst": "legendre",
+   "rel": "depends_on"
+  },
+  {
+   "src": "weights",
+   "dst": "nodes",
+   "rel": "depends_on"
+  },
+  {
+   "src": "rule",
+   "dst": "nodes",
+   "rel": "depends_on"
+  },
+  {
+   "src": "rule",
+   "dst": "weights",
+   "rel": "depends_on"
+  },
+  {
+   "src": "exactness",
+   "dst": "rule",
+   "rel": "depends_on"
+  },
+  {
+   "src": "exactness",
+   "dst": "error",
+   "rel": "uses"
+  },
+  {
+   "src": "golub-welsch",
+   "dst": "jacobi",
+   "rel": "depends_on"
+  },
+  {
+   "src": "golub-welsch",
+   "dst": "rule",
+   "rel": "depends_on"
+  },
+  {
+   "src": "golub-welsch",
+   "dst": "nodes",
+   "rel": "uses"
+  }
+ ]
+}
