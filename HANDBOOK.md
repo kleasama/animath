@@ -234,6 +234,7 @@ Each array is one blob in `.npy` format (`allow_pickle=False`); `meta.version` $
 | `bem.dlp_ellipse` | `a`, `b`, `n_max` | `n`, `error`, `t`, `density` | `target` |
 | `krylov.gmres` | `operator`, `tol`, `maxiter` $\le 256$, `ritz` | `x`, `residual`, `eigs`, `ritz`, `ritz_k` | `iterations`, `converged`, `true_residual` |
 | `krylov.cg` | `operator`, `tol`, `maxiter` | `x`, `residual`, `error_a`, `bound` | `kappa`, `iterations`, `converged` |
+| `h2.rss` | `geometry` ∈ {plate, sphere}, `n`, `leaf`, `eta`, `kappa`, `tol`, `precision` ∈ {single, double}, `seed` | `points`, `perm`, `box`, `range`, `near`, `far`, `dof` (CSR, with `_ptr`), `stage`, `stage_norm`, `dag`, `schur`, `schur_norm`, `fill`, `fill_norm`, `active`, `top` | `depth`, `top_level`, `top_size`, `colours`, `stages`, `error` |
 
 Operators (discriminator `name`): `poisson1d` $\operatorname{tridiag}(-1,2,-1)$; `convdiff` $\operatorname{tridiag}(-1-P,2,-1+P)$, $P$ the cell Péclet number; `efie` (§8.5); `dlp` (§8.6). Right-hand sides: $\mathbf{1}$, $\mathbf{1}$, $\mathbf{V}$, $g$.
 
@@ -257,6 +258,42 @@ Nyström discretization with the trapezoid rule on $y(t) = (a\cos t, b\sin t)$; 
 $$\frac{\|e_k\|_A}{\|e_0\|_A} \le 2\Big(\frac{\sqrt\kappa-1}{\sqrt\kappa+1}\Big)^k. \tag{8.6}$$
 
 8.7 Implementation notes. Dense NumPy/SciPy, vectorized assembly; all kernels are deterministic and side-effect free, so concurrent `compute` calls are safe (store writes are atomic, §3.4). Numba is deferred until a profile demands it (D7). Matrix symbols ($A$, $H$, $R$, $V$) keep textbook case; `N803`/`N806` are silenced per file.
+
+8.8 Strong recursive skeletonisation (`h2.rss`). Points: a plate, the $m \times m$ cell centres of the unit square ($n = m^2$, $w = 1/n$), or a sphere, the Fibonacci lattice on the sphere of radius $\tfrac12$ centred in the unit cube ($w = \pi/n$). With $G(r) = e^{i\kappa r}/(4\pi r)$ and $\square_i$ the square of side $\sqrt w$ centred at $x_i$,
+$$A_{ij} = w\,G(|x_i - x_j|)\ (i \ne j),\qquad A_{ii} = \int_{\square_i} G(|y|)\,dy = \frac14\sum_{q=1}^{16} c_q\,\frac{e^{i\kappa\rho_q} - 1}{i\kappa},\quad \rho_q = \frac{\sqrt w}{2\cos\theta_q}, \tag{8.7}$$
+$\theta_q = \tfrac\pi8(u_q + 1)$, $(u_q, c_q)$ the 16-point Gauss–Legendre rule; $\kappa = 0$ gives $A_{ii} = \sqrt w\,\ln(1+\sqrt2)/\pi$. The factorisation runs in `precision` (complex64 by default, real when $\kappa = 0$).
+
+Cluster tree: balanced binary of depth $d = \min\{d : \ell\,2^d \ge n\}$, $\ell$ = `leaf`, numbered breadth-first with children $2t+1, 2t+2$; each split is at the rank median along the axis minimising the larger child diameter (first minimiser); $[l_t, h_t]$ is the tight bounding box, $\operatorname{diam} t = |h_t - l_t|$. Lists, level by level from $N(0) = \{0\}$, with $C(t) = \operatorname{ch} N(\operatorname{pa} t)$ and $\delta$ the box distance:
+$$F(t) = \{s \in C(t) : \delta(t,s) > 0,\ \tfrac12(\operatorname{diam} t + \operatorname{diam} s) \le \eta\,\delta(t,s)\},\qquad N(t) = C(t) \setminus F(t). \tag{8.8}$$
+Every pair of leaves lies in exactly one block $t \times s$ with $s \in N(t)$ at level $d$ or $s \in F(t)$ at some level. Level $\lambda$ is coloured greedily in tree order,
+$$c(t) = \min\{c \ge 0 : c \ne c(u)\ \forall u \in N^2(t),\ u < t\},\qquad N^2(t) = \textstyle\bigcup_{s \in N(t)} N(s), \tag{8.9}$$
+so stages of one colour touch disjoint neighbourhoods and may run in parallel. Stage order is (colour, tree index); the DAG has an edge from each stage to every later stage in $N^2(t)$.
+
+Column ID by pivoted QR $M P = Q\begin{bmatrix} R_{11} & R_{12} \\ 0 & R_{22}\end{bmatrix}$, $S$ the first $k$ pivots, $R$ the rest, $\varepsilon$ = `tol`:
+$$k = \#\{j : |r_{jj}| > \varepsilon\,|r_{11}|\},\qquad T = R_{11}^{-1}R_{12},\qquad \|M_{:,R} - M_{:,S}T\|_F = \|R_{22}\|_F. \tag{8.10}$$
+
+**Algorithm 8.3 (strong RS-S).** Active DOFs $B_t$ (the leaf's indices at level $d$), near blocks $D_{ts} = A_{B_t B_s}$, no fill $\Phi$. Top level $\tau = \lambda_F - 1$, $\lambda_F$ the coarsest level with a far pair ($\tau = d$ if there is none). For $\lambda = d, \dots, \tau + 1$ and $t$ in stage order:
+1. Far field $K_{BF} = [A_{B_t B_s} + \Phi_{ts}]_{s \notin N(t)}$, $K_{FB}$ likewise; ID (8.10) of $\begin{bmatrix} \mathrm R(K_{FB}) \\ \mathrm R(K_{BF}^{T}) \end{bmatrix}$, $\mathrm R(\cdot)$ the thin-QR triangle (same pivots and $R_{ij}$ as the full far field).
+2. Shear rows $X_R \leftarrow X_R - T^{T}X_S$ and columns likewise in $D_{tt}$, $D_{ts}$, $D_{st}$: the far couplings of $R$ vanish up to (8.10).
+3. LU of $\tilde A_{RR}$; with $J = S \cup \bigcup_{s \in N(t)\setminus t} B_s$, $L_{21} = \tilde A_{JR}\tilde A_{RR}^{-1}$, $U_{12} = \tilde A_{RR}^{-1}\tilde A_{RJ}$.
+4. Schur update
+$$\tilde A_{JJ} \leftarrow \tilde A_{JJ} - L_{21}\tilde A_{RJ}; \tag{8.11}$$
+block $(a, b) \in N(t)^2$ adds to $D_{ab}$ if $b \in N(a)$, else to the fill $\Phi_{ab}$. Then $B_t \leftarrow B_t(S)$.
+
+After each level $B_p = B_{2p+1} \cup B_{2p+2}$; $D_{pq}$, $q \in N(p)$, is assembled from the child near blocks and, for far child pairs, $A$ plus their fill; the remaining fill moves to the parents. Finally, dense LU of $[D_{pq}]$ on level $\tau$. Solve: forward sweep (shear, $L_{21}$, $\tilde A_{RR}^{-1}$), top solve, backward sweep in reverse ($U_{12}$, $T$). The reported error is $\|\tilde x - x\|/\|x\|$ with $x = A^{-1}g$ by dense complex128 LU and $g$ complex Gaussian from `seed`. A singular pivot block raises `ComputeError`.
+
+Trace: `stage` rows $(t, \lambda, c(t), n_t, k_t, r_t, |J|)$; `stage_norm` $(\|K_{BF}\|_2, \|K_{FB}\|_2, \|R_{22}\|_F)$; `schur` rows (stage, $a$, $b$, fill) with $\|\Delta\|_F$ in `schur_norm`; `fill` rows $(\lambda, a, b)$, the fill entering level $\lambda$, with norms; `active` $(\lambda, \sum_t |B_t|)$ at the start of each level and at the top; `dof` per stage $[B_t(S), B_t(R)]$; `top` the top DOFs.
+
+Instance $n = 4096$, `leaf` 64 ($d = 6$), $\eta = 2.5$, $\kappa = 2\pi$, complex64: top level 2, colours 12, 10, 9, 6 on levels 6–3.
+
+| `tol` | $r_t/n_t$, leaves | active, levels 6 → 2 | error |
+|---|---|---|---|
+| 1e-3 | 0.70–0.88 | 4096, 844, 550, 251, 130 | 1.7e-4 |
+| 1e-4 | 0.56–0.78 | 4096, 1275, 818, 378, 192 | 1.9e-5 |
+| 1e-5 | 0.39–0.72 | 4096, 1768, 1148, 507, 264 | 2.3e-6 |
+
+Implementation: GEMMs go through SciPy's BLAS (`get_blas_funcs`), since the NumPy and SciPy wheels bundle separate OpenBLAS builds whose thread pools contend when calls interleave (about 8× slower); 2-norms of tall blocks come from their thin-QR triangles; the reference matrix is assembled in 512-row slabs.
+
 ## 9 Scenes and rendering
 
 Algorithm 9.1 Scene generation: SPEC Algorithm 6.1.
@@ -275,6 +312,7 @@ Algorithm 9.1 Scene generation: SPEC Algorithm 6.1.
 | `field` | `values` $u_{ij}$ at $(x_j, y_i)$, $y$ upward | viridis heatmap | fade in |
 | `surface` | `points` $(n,3)$, `faces` $(m,3)$, `scalars` $(n)$ or $(m)$, `azimuth`, `elevation` | PyVista offscreen image | fade in |
 | `trace` | `lines` (plain text, not TeX), `steps` (line indices) | monospace listing, cursor | write, then cursor to line `steps[i]` at $t_0 + i(t_1-t_0)/n$ |
+| `hierarchy` | `data`, `level`, `done`, `coloured`, `views` ⊆ {`plate`, `operator`}, `steps` (`do`, `part`) | cluster boxes; block operator in tree order (§9.15) | fade in, then step $i$ at $t_0 + (i+1)(t_1-t_0)/(n+1)$ |
 
 9.3 Semantic grid. For frame $F = [-W/2, W/2] \times [-H/2, H/2]$, $H = 8$, $W = 8w/h$, a region with normalized box $(u_0, v_0, u_1, v_1)$ occupies
 $$C = [-W/2 + u_0 W,\; -W/2 + u_1 W] \times [-H/2 + v_0 H,\; -H/2 + v_1 H]. \tag{9.1}$$
@@ -348,6 +386,21 @@ kept if it exists and a visual is alive; at most 6, evenly subsampled. A transie
 1. `animate` registers `code` in `PRIMITIVES` for its duration; with the renderer this makes it thread-unsafe: parallelize scenes over processes (WP9). `scene.catalog()` stays free of `code`, so the planner never emits it.
 2. LaTeX precompile is the build phase of the draft render: `compose` builds every mobject before any frame, and build errors are localized.
 3. Unit tests use a queued fake LLM (`tests/scene/fake.py`); no network.
+
+9.15 `hierarchy` primitive. Draws an `h2.rss` DataSet (§8.8) from level $\lambda$ (default $d$, `done` stages already eliminated). Plate view (2-D points only): cluster boxes, grey or in their colour class, dimmed once eliminated. Operator view: the active matrix in tree order, block widths $\propto |B_t|$, rescaled to the full side on each level; near blocks orange, far blocks blue by level (darker is coarser, the background is the far field of level $\lambda$), fill amber, zeroed bands white, $S$ blue and $R$ red. Parts: `cluster` (BFS id on the level; `t` the first stage with the largest $|N(t)|$, `s` its next later neighbour; default the current cluster), `colour`, `block` $(a, b)$.
+
+| Action | Effect |
+|---|---|
+| `select`, `footprint`, `ring` | mark $t$ (exclusive), $N(t)$, $N^2(t) \setminus N(t)$ (dashed) |
+| `clear`, `colour` | unmark $t$ or all; colour $t$ or the level by $c(t)$ |
+| `rotate`, `split`, `zero`, `eliminate`, `schur`, `fill` | phases 1–6 of stage $t$, monotone: flash its rows and columns; split $S \mid R$; zero $R$ against the far field; shrink to $k_t$; flash $N(t)^2$; show its fill |
+| `drop` | remove a fill block on view |
+| `wave` | eliminate the pending stages of a colour (default the least), flashing the class |
+| `coarsen` | finish the level and merge children into parents |
+| `top` | one dense block on the top level |
+
+`advance` maps (state, step) to the next state and its flashes; `draw` maps a state to keyed specs; transition $i$ is one `Transform` per changed key. A vanishing near or fill block morphs into its parent's fill or near block (else the dense top), a box into its parent box; anything else fades; flashes run there and back. Items are created invisible on first use and removed at the next transition; an invisible anchor recovers the fit (9.2). There is no `AnimationGroup`, which `Scene.add` would restructure out of the board. `Board.step(i, t, run)` gives the cues of transition $i$ for any timing; steps closer than 0.1 s raise `AnimateError`.
+
 ## 10 Narration
 
 10.1 $\Phi_6$ maps each scene $s$ with lines $\ell_1,\dots,\ell_m$ to a `Narration`. Entry: `narrate.narrate(board, store, tts, verbalizer, workers) -> {scene id: digest}`.
@@ -482,6 +535,8 @@ $f$ the animate function's qualified name, $\pi_5$ = (`width`, `height`, `fps`, 
 | Draft render, 12 s scene, 8 primitives (`surface` included) | ≈ 10.5 s on 4 cores |
 | `tests/extract` | ≈ 2 s on 4 cores |
 | `tests/scene` WP8 part | ≈ 10 s on 4 cores |
+| `h2.rss`, $n = 4096$, `tol` 1e-5 | factorisation 3.2 s; with the dense reference 8 s |
+| `hierarchy`, full instance, 13 steps, 1080p30 | 41 s for 20.5 s of video, about 850 items per state |
 
 ## 14 Decisions log
 
@@ -494,3 +549,7 @@ $f$ the animate function's qualified name, $\pi_5$ = (`width`, `height`, `fps`, 
 | D5 | 2026-10-07 | Commits authored by the user, no co-author trailers | user preference |
 | D6 | 2026-10-07 | `requirements.lock` instead of `uv.lock` (177 kB) | Drive transfer size |
 | D7 | 2026-10-07 | Numerics in NumPy/SciPy without Numba | largest admissible request < 4 s; `hankel2` has no Numba support |
+| D8 | 2026-10-07 | `h2.rss` is textbook strong RS-S: $\eta = 2.5$, tree-order greedy distance-2 colouring, fill kept and recompressed with the far field | reference method; variants are computed by consumers from the DataSet |
+| D9 | 2026-10-07 | Self-term of (8.7) is the exact cell integral | bounded, mesh-consistent diagonal |
+| D10 | 2026-10-07 | GEMMs in `h2` through SciPy's BLAS | NumPy and SciPy OpenBLAS pools contend (about 8×) |
+| D11 | 2026-10-07 | `hierarchy` morphs keyed items with per-item `Transform`s | `Scene.add` dissolves groups not yet in the scene |

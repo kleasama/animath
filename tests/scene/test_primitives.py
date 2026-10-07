@@ -25,7 +25,17 @@ def build(name: str, ctx: Context, **args: Any) -> Any:
 
 def test_catalog() -> None:
     cat = catalog()
-    assert set(cat) == {"text", "equation", "derive", "matrix", "plot", "field", "surface", "trace"}
+    assert set(cat) == {
+        "text",
+        "equation",
+        "derive",
+        "matrix",
+        "plot",
+        "field",
+        "surface",
+        "trace",
+        "hierarchy",
+    }
     assert all(
         {"region", "until"} <= set(cast(dict[str, Any], s["properties"])) for s in cat.values()
     )
