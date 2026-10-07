@@ -7,13 +7,13 @@ name = "animath"
 version = "0.1.0"
 description = "Mathematical source to educational video."
 requires-python = ">=3.12"
-dependencies = ["pydantic>=2.13,<3", "anthropic>=1.11,<2"]
+dependencies = ["pydantic>=2.13,<3", "anthropic>=1.11,<2", "numpy>=2.3", "scipy>=1.16"]
 
 [project.scripts]
 animath = "animath.cli:main"
 
 [dependency-groups]
-dev = ["pytest>=8", "pytest-cov>=6", "ruff>=0.14", "mypy>=1.18", "pip-licenses>=5"]
+dev = ["pytest>=8", "pytest-cov>=6", "ruff>=0.14", "mypy>=1.18", "pip-licenses>=5", "scipy-stubs>=1.16"]
 
 [tool.ruff]
 line-length = 100

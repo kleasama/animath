@@ -23,7 +23,7 @@ Legend: ✓ done · ✱ in progress · ○ open · ⏸ checkpoint (review, commi
 | 2.2 | WP1 ingest: LaTeX flatten, macros, theorems, algorithms → $\mathcal{D}$ | ○ |
 | 2.3 | WP1 ingest: PDF (source lookup, raster + Claude transcription) → $\mathcal{D}$ | ○ |
 | 2.4 | WP1 equation check; golden set and expected IR | ○ |
-| 2.5 | WP2 numerics: quadrature, Krylov with trace capture, MoM/BEM toy kernels (Numba), data cache | ○ |
+| 2.5 | WP2 numerics: quadrature, Krylov with trace capture, MoM/BEM toy kernels, data cache | ✓ |
 | 2.6 | WP3 scene: primitive library (equation, derivation step, matrix, plot, field, algorithm trace) | ○ |
 | 2.7 | WP3 scene: layout checker, renderer wrapper, PyVista bridge | ○ |
 | 2.8 | WP4 narrate: SRE verbalization, Kokoro service, forced alignment, VTT | ○ |
