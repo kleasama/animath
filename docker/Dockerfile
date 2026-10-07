@@ -7,11 +7,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 RUN npm install -g speech-rule-engine@4.1.4 mathjax-full@3.2.1
 ENV NODE_PATH=/usr/local/lib/node_modules ANIMATH_KOKORO=/opt/kokoro
-ARG HF=https://huggingface.co
-RUN mkdir -p /opt/kokoro/voices \
-    && curl -fsSL -o /opt/kokoro/model.onnx $HF/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/main/onnx/model.onnx \
-    && curl -fsSL -o /opt/kokoro/config.json $HF/hexgrad/Kokoro-82M/resolve/main/config.json \
-    && curl -fsSL -o /opt/kokoro/voices/af_heart.bin $HF/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/main/voices/af_heart.bin
+ARG KOKORO=https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0
+RUN mkdir -p /opt/kokoro && cd /opt/kokoro \
+    && curl -fsSLO $KOKORO/kokoro-v1.0.onnx && curl -fsSLO $KOKORO/voices-v1.0.bin \
+    && curl -fsSL -o config.json https://raw.githubusercontent.com/thewh1teagle/kokoro-onnx/main/src/kokoro_onnx/config.json \
+    && printf '%s  %s\n' \
+       7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5 kokoro-v1.0.onnx \
+       bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d voices-v1.0.bin \
+       5abb01e2403b072bf03d04fde160443e209d7a0dad49a423be15196b9b43c17f config.json \
+       | sha256sum -c -
 COPY --from=ghcr.io/astral-sh/uv:0.9 /uv /usr/local/bin/uv
 WORKDIR /app
 COPY requirements.lock ./
