@@ -607,7 +607,7 @@ $f$ the animate function's qualified name, $\pi_5$ = (`width`, `height`, `fps`, 
 
 12.4 Budget (N9). After each LLM stage the summed usage $u$ costs $c = p\cdot u / 10^6$ USD with per-MTok prices $p$ (input, output, cache read, cache write) from `PRICES` (`claude-opus-5-5`: 4, 20, 0.2, 5). $c >$ `budget_usd` raises `PipelineError`; a model without prices raises when a budget is set.
 
-12.5 Metrics (SPEC §5), `eval.metrics`, `eval.formula`, `eval.judge`; `eval.evaluate(store, manifest, expected, llm)` reads every input from the manifest.
+12.5 Metrics (SPEC §5), `eval.metrics`, `eval.formula` (over `core.formula`), `eval.judge`; `eval.evaluate(store, manifest, expected, llm)` reads every input from the manifest.
 
 | Metric | Definition | Source |
 |---|---|---|
@@ -622,7 +622,7 @@ $f$ the animate function's qualified name, $\pi_5$ = (`width`, `height`, `fps`, 
 
 `metrics.failures` lists metrics missing their target (`TARGETS`).
 
-**Algorithm 12.3 (equivalence, N1, I2).** Normalization: drop spacing and sizing commands (`\,`, `\quad`, `\left`, `\big`, …) and `&`, tokenize into control words, control symbols and characters, unwrap braces around a single token, strip trailing `.,;`; compare token sequences. Equivalence: parse by SymPy `parse_latex` (Lark backend, font commands removed); an ambiguous parse yields all readings; equalities $a = b$, $c = d$ agree iff $(a-b) \mp (c-d)$ simplifies to 0, expressions iff $a - b$ does. Verdict: True if some pair agrees, False if none, None if either side does not parse. Formulas shown are `math`, `equation` latex and `derive` steps (match markers `{{…}}` removed pairwise). References are the equations and the inline math of $\mathcal D$, each with its parts split at `,`, `;`, `\\` outside brackets. A formula is traced iff it matches a reference (normalized or equivalent), or, as a derive step, is equivalent to its predecessor.
+**Algorithm 12.3 (equivalence, N1, I2).** Normalization: drop spacing and sizing commands (`\,`, `\quad`, `\left`, `\big`, …; not the second `\` of `\\`) and `&`, tokenize into control words, control symbols and characters, unwrap braces around a single token, strip trailing `.,;`; compare token sequences. Equivalence: parse by SymPy `parse_latex` (Lark backend, font commands removed); an ambiguous parse yields all readings; equalities $a = b$, $c = d$ agree iff $(a-b) \mp (c-d)$ simplifies to 0, expressions iff $a - b$ does. Verdict: True if some pair agrees, False if none, None if either side does not parse. Formulas shown are `math`, `equation` latex and `derive` steps (match markers `{{…}}` removed pairwise). References are the equations and the inline math of $\mathcal D$, each with its items: split at `,`, `;`, `\\` outside brackets and environments, layout environments (`gathered`, `aligned`, `split`) dropped. A formula is traced iff it matches a reference (normalized or equivalent), its items all do, or, as a derive step, it is equivalent to its predecessor. `core.formula` implements it; the planner applies it to the selected nodes (§7).
 
 12.6 Golden run (C5). Requires `ANIMATH_API_KEY` (§2.3) as an environment variable. For each case: `animath run <source> -p approval_gates=false`, then `animath eval <manifest> --expected tests/golden/<case>/expected.json --judge`.
 
