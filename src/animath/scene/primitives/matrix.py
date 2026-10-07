@@ -6,7 +6,7 @@ from pydantic import model_validator
 
 from animath.core.errors import AnimateError
 from animath.scene.layout import Box
-from animath.scene.primitives.base import Args, ArrayRef, Context, Primitive
+from animath.scene.primitives.base import Args, ArrayRef, Context, Primitive, path
 from animath.scene.primitives.field import colorize, raster
 
 DENSE_MAX = 8
@@ -38,7 +38,8 @@ def grid(entries: list[list[str]]) -> Mobject:
 
 
 class Matrix(Primitive[MatrixArgs]):
-    """Entries for n <= DENSE_MAX; otherwise the pattern log10|a_ij| as a heatmap."""
+    """Entries for n <= DENSE_MAX; otherwise the pattern log10|a_ij| as a heatmap. Parts of
+    entries, 1-based: row:i, col:j, entry:i:j, brackets."""
 
     name = "matrix"
     args = MatrixArgs
@@ -54,3 +55,19 @@ class Matrix(Primitive[MatrixArgs]):
         mag = np.abs(z)
         floor = mag[mag > 0].min() if (mag > 0).any() else 1.0
         return raster(colorize(np.log10(np.maximum(mag, floor))), cell)
+
+    def part(self, m: Mobject, a: MatrixArgs, sel: str) -> Mobject:
+        if not isinstance(m, MobjectMatrix):
+            return path(m, sel)
+        rows, cols = m.get_rows(), m.get_columns()
+        kind, *ix = sel.split(":")
+        k = [int(i) - 1 for i in ix if i.isdigit() and int(i) > 0]
+        if sel == "brackets":
+            return m.get_brackets()
+        if kind in ("row", "col") and len(ix) == len(k) == 1:
+            g = rows if kind == "row" else cols
+            if k[0] < len(g):
+                return g[k[0]]
+        if kind == "entry" and len(ix) == len(k) == 2 and k[0] < len(rows) and k[1] < len(cols):
+            return rows[k[0]][k[1]]
+        return path(m, sel)

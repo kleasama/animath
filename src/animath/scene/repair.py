@@ -8,7 +8,6 @@ from animath.core.hashing import digest_of
 from animath.core.schemas import Model, Scene, Usage, Visual
 from animath.core.store import Store
 from animath.llm import LLM
-from animath.scene.codegen import CodeArgs, api
 from animath.scene.layout import GRID
 from animath.scene.primitives import catalog
 
@@ -22,19 +21,14 @@ SYSTEM = f"""You repair the visuals of one scene of an educational mathematics v
 pitfalls.
 2. `args` is a JSON object valid against the schema of `primitive` in the catalog; `at` is a
 bookmark or null.
-3. Prefer a catalog primitive; use `code` only where no primitive shows the visual.
-4. `code` defines exactly `def build(array)` returning one Mobject, using only the API below; no
-imports, while, try, with, raise or names beginning with `_`. `array(data, name, part=None)`
-returns the real NumPy array `name` of data request `data`; complex arrays need `part` in abs,
-real, imag.
-5. A visual is scaled down to fit its region (width, height in frame units):
+3. Prefer a catalog primitive; use `code` only where no other primitive shows the visual.
+4. A visual is scaled down to fit its region (width, height in frame units):
 {json.dumps(CELLS)}; below scale 0.4 the layout is rejected. Visuals alive at the same time need
 disjoint regions; `main` meets `left` and `right`. `until` names the bookmark removing the visual.
+5. Keep the motion: each action fires at a bookmark, at the onset of `word` in that line, and
+must change something visible; keep `replaces`, `view` and `persist` as they are.
 
-Catalog: {json.dumps({**catalog(), "code": CodeArgs.model_json_schema()}, sort_keys=True)}
-
-API:
-{api()}"""
+Catalog: {json.dumps(catalog(), sort_keys=True)}"""
 
 
 class Fix(Model):

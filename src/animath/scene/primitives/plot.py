@@ -25,7 +25,7 @@ from pydantic import Field
 from animath.core.errors import AnimateError
 from animath.core.schemas import Model
 from animath.scene.layout import Box
-from animath.scene.primitives.base import Args, Context, Primitive, Vector
+from animath.scene.primitives.base import Args, Context, Primitive, Vector, path
 
 COLORS = (BLUE, YELLOW, GREEN, RED, PURPLE)
 
@@ -58,7 +58,8 @@ def places(h: float) -> int:
 
 
 class Plot(Primitive[PlotArgs]):
-    """Line graphs y_k(x_k) on shared axes; logy gives a decade-scaled ordinate."""
+    """Line graphs y_k(x_k) on shared axes; logy gives a decade-scaled ordinate. Parts: axes,
+    labels, series:k (0-based), legend; `show series:k` draws a graph."""
 
     name = "plot"
     args = PlotArgs
@@ -107,3 +108,9 @@ class Plot(Primitive[PlotArgs]):
             legend = VGroup(*keys).arrange(DOWN, aligned_edge=RIGHT, buff=0.1)
             parts.append(legend.next_to(ax.get_corner(UR), DL, buff=0.1))
         return VGroup(*parts)
+
+    def part(self, m: Mobject, a: PlotArgs, sel: str) -> Mobject:
+        names = ["axes", *(["labels"] if a.xlabel or a.ylabel else [])]
+        names += [f"series:{k}" for k in range(len(a.series))]
+        names += ["legend"] if any(s.label for s in a.series) else []
+        return m[names.index(sel)] if sel in names else path(m, sel)
