@@ -32,12 +32,12 @@ Legend: ✓ done · ✱ in progress · ○ open · ⏸ checkpoint (review, commi
 | 3.1 | WP6 extract: $\mathcal{K}$ with provenance | ✓ |
 | 3.2 | WP7 plan: subgraph selection, storyboard, symbol ledger, duration budget | ✓ |
 | ⏸ C3 | Semantics review (auto-approved); group C integrated | ✓ |
-| 4.1 | WP8 codegen with retrieval, static gate | ○ |
-| 4.2 | WP8 repair loop, critic, pitfall memory | ○ |
-| ⏸ C4 | Scene generation review | ○ |
-| 5.1 | WP9 orchestrator, resume, parallel scenes | ○ |
-| 5.2 | WP9 evaluation harness ($Q_1$–$Q_7$) | ○ |
-| 5.3 | WP9 end-to-end on golden set | ○ |
+| 4.1 | WP8 codegen with retrieval, static gate | ✓ |
+| 4.2 | WP8 repair loop, critic, pitfall memory | ✓ |
+| ⏸ C4 | Scene generation and pipeline review (auto-approved); integrated | ✓ |
+| 5.1 | WP9 orchestrator, resume, parallel scenes | ✓ |
+| 5.2 | WP9 evaluation harness ($Q_1$–$Q_7$) | ✓ |
+| 5.3 | WP9 end-to-end on golden set (live, needs `ANTHROPIC_API_KEY`) | ○ |
 | ⏸ C5 | Release v0.1 | ○ |
 
 ## Notes
@@ -54,12 +54,13 @@ Legend: ✓ done · ✱ in progress · ○ open · ⏸ checkpoint (review, commi
 | 2.4 | SymPy equivalence check deferred to WP9; pandoc 3.9 bundled via `pypandoc-binary` (subprocess). |
 | C2 | PRs #1–#5 merged. 220 tests, 100% line+branch coverage, mypy strict, licences clean. For WP7/WP8: complex data refs need `part` ∈ {abs, real, imag}; the planner receives the primitive catalog as an argument (Rule 6.2). |
 | C3 | PRs #7, #8 merged. 286 tests, 100% line+branch coverage. For WP9: pass `scene.catalog()` and the numerics kernel schemas into `plan.run`; planner depends on `jsonschema`. |
+| C4 | PRs #9, #10 merged. `scene.animate` returns `(SceneRender, Usage)` and is the pipeline default; `pipeline.render_only` is the no-LLM path. 362 tests, 100% line+branch coverage. |
 
 ## Open questions
 
 | # | Question | Default |
 |---|---|---|
-| O1 | Add `ANTHROPIC_API_KEY` as an environment secret before group C (live extraction and planning)? | yes |
+| O1 | `ANTHROPIC_API_KEY` environment secret | user approved; environment added 2026-10-07, verification by a fresh thread pending |
 
 ## Known bugs
 

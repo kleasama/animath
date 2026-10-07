@@ -42,7 +42,7 @@ from animath.eval import metrics
 from animath.llm import LLM, from_settings
 from animath.narrate.tts import TTS, Espeak, Kokoro
 from animath.narrate.verbalize import Verbalizer
-from animath.scene import catalog, render
+from animath.scene import animate, catalog, render
 
 VERSION = "1"
 STAGES = ("ingest", "extract", "plan", "compute", "narrate", "animate", "assemble")
@@ -77,7 +77,7 @@ def render_only(
     llm: LLM,
     params: Params,
 ) -> tuple[SceneRender, Usage]:
-    """Phi_5 by the primitive library alone, until codegen and repair (WP8) are wired."""
+    """Phi_5 by the primitive library alone: no codegen, repair, or critic."""
     return render(scene, params, store, narration, data), Usage()
 
 
@@ -230,7 +230,7 @@ class Pipeline:
         llm: LLM | None = None,
         tts: Callable[[Params], TTS] = voice,
         verbalizer: Verbalizer | None = None,
-        animate: Animate = render_only,
+        animate: Animate = animate,
         fetch: ingest.Fetch | None = ingest.fetch_url,
         check: ingest.Check | None = ingest.compile_errors,
     ) -> None:
