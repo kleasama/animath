@@ -1,13 +1,15 @@
+from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 
 from animath.core.hashing import digest_of
-from animath.core.schemas import Narration, Scene, Storyboard
+from animath.core.schemas import Line, Narration, Scene, Storyboard
 from animath.core.store import Store
 from animath.narrate.align import timeline
+from animath.narrate.g2p import split
 from animath.narrate.tts import TTS, to_wav
 from animath.narrate.verbalize import Verbalizer
 
-VERSION = "1"
+VERSION = "2"
 
 
 def key(scene: Scene, tts: TTS, verbalizer: Verbalizer) -> str:
@@ -18,6 +20,23 @@ def key(scene: Scene, tts: TTS, verbalizer: Verbalizer) -> str:
         tts.id,
         verbalizer.id,
     )
+
+
+def sentences(lines: Sequence[Line], said: Sequence[str]) -> list[tuple[str, dict[str, int]]]:
+    """Lines joined until one ends in . ! or ?; bookmark -> index of its line's first word."""
+    out: list[tuple[str, dict[str, int]]] = []
+    words: list[str] = []
+    cues: dict[str, int] = {}
+    for ln, text in zip(lines, said, strict=True):
+        if ln.bookmark:
+            cues[ln.bookmark] = len(words)
+        words += text.split()
+        if words and any(c in ".!?" for c in split(words[-1])[2]):
+            out.append((" ".join(words), cues))
+            words, cues = [], {}
+    if words:
+        out.append((" ".join(words), cues))
+    return out
 
 
 def narrate(
@@ -34,10 +53,8 @@ def narrate(
     texts = [[next(spoken) for _ in s.narration] for s in todo]
 
     def one(scene: Scene, said: list[str]) -> str:
-        lines = [
-            (t, ln.bookmark, tts.synth(t)) for t, ln in zip(said, scene.narration, strict=True)
-        ]
-        audio, words, marks = timeline(lines, tts.rate)
+        utts = [(t, c, *tts.synth(t)) for t, c in sentences(scene.narration, said)]
+        audio, words, marks = timeline(utts, tts.rate)
         n = Narration(
             scene_id=scene.id,
             audio=store.put_blob(to_wav(audio, tts.rate)),
