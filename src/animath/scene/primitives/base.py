@@ -19,6 +19,7 @@ from manim import (
 )
 from numpy.typing import NDArray
 from pydantic import Field
+from pydantic.json_schema import SkipJsonSchema
 
 from animath.core.errors import AnimateError, StoreError
 from animath.core.schemas import DataSet, Model, Scene
@@ -64,7 +65,8 @@ class Args(Model):
     replaces: int | None = Field(
         None, ge=0, description="earlier visual this one morphs out of; its until is this at"
     )
-    view: str | None = Field(None, description="persistent view, continued by the next scene")
+    view: str | None = Field(None, description="persistent view, continued by a later visual")
+    resume: SkipJsonSchema[bool] = Field(False, description="initial own animations at build")
     persist: bool = Field(False, description="stays on screen into the next scene")
     actions: list[Action] = Field([], description="timed changes of parts of this visual")
 
@@ -164,7 +166,6 @@ class Primitive[A: Args](ABC):
     name: ClassVar[str]
     args: type[A]
     verbs: ClassVar[tuple[str, ...]] = ()
-    timed: ClassVar[tuple[str, ...]] = ()
 
     @abstractmethod
     def build(self, a: A, ctx: Context, cell: Box) -> Mobject: ...

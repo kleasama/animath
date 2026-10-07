@@ -14,11 +14,12 @@ from animath.plan.select import Selection
 
 TOKEN = re.compile(r"\\[A-Za-z]+|[^\W_]+")
 MATH = re.compile(r"\$[^$]*\$")
+SPOKEN = re.compile(r"\$[^$]*\$|\S+")
 TOLERANCE = 0.1
 COVERAGE = 0.9
 OVERLAPS = {frozenset({"main", "left"}), frozenset({"main", "right"})}
 MATH_WEIGHT = 1.5
-GAP_S, HOLD_S, STEP_S, STATIC_S = 0.35, 1.0, 1.0, 7.0
+GAP_S, HOLD_S, STEP_S, STATIC_S, PAUSE_MAX = 0.35, 1.0, 1.0, 7.0, 30.0
 
 
 def words(text: str) -> float:
@@ -33,13 +34,13 @@ def norm(word: str) -> str:
 
 
 def position(word: str | None, text: str) -> float | None:
-    """Fraction of the line spoken before the first plain word `word`, ignoring case and
-    punctuation."""
+    """Fraction of the line's spoken length, weighted as in `words`, before the first plain word
+    `word`, ignoring case and punctuation."""
     if word is None:
         return 0.0
-    w, plain = norm(word), MATH.sub("$", text).split()
-    hit = [i for i, x in enumerate(plain) if w and "$" not in x and norm(x) == w]
-    return hit[0] / len(plain) if hit else None
+    w = norm(word)
+    hit = [x.start() for x in SPOKEN.finditer(text) if w and "$" not in x[0] and norm(x[0]) == w]
+    return words(text[: hit[0]]) / words(text) if hit else None
 
 
 @dataclass(eq=False)
@@ -69,6 +70,8 @@ def script(ds: DScene, wpm: int, errors: list[str]) -> list[Beat]:
 
     def add(ln: DLine, w: str, item: str | None = None) -> Beat:
         text = ln.text.replace("{}", item) if item else ln.text
+        if ln.bookmark and ln.bookmark.startswith("#"):
+            errors.append(f"{w}: bookmark {ln.bookmark!r}: # is kept for unnamed lines")
         b = Beat(text, ln.bookmark or f"#{len(out)}", ln.pause, [], w)
         for j, a in enumerate(ln.actions):
             if position(a.word, text) is None:
@@ -89,6 +92,8 @@ def script(ds: DScene, wpm: int, errors: list[str]) -> list[Beat]:
             errors.append(f"{where}.loop: brief needs one line per later item, or one for all")
         else:
             per = len(lp.brief) == len(lp.over) - 1
+            if not per and "{}" in lp.brief[0]:
+                errors.append(f"{where}.loop.brief[0]: {{}} needs one brief line per later item")
             briefs = [
                 add(DLine(text=t), f"{where}.loop.brief[{i}]", lp.over[i + 1] if per else None)
                 for i, t in enumerate(lp.brief)
@@ -107,6 +112,8 @@ def script(ds: DScene, wpm: int, errors: list[str]) -> list[Beat]:
     else:
         onsets(out, wpm)
     for i, b in enumerate(out):
+        if not 0.0 <= b.pause <= PAUSE_MAX:
+            errors.append(f"{b.where}: pause {b.pause:.2f} s outside [0, {PAUSE_MAX:.0f}] s")
         for _, a in b.acts:
             if "word" in a:
                 at = b.speech * (position(a["word"], b.text) or 0.0) / slot(out, i)
@@ -242,14 +249,21 @@ def plan(
             continue
         if (args := _json(v.args, w, errors)) is None:
             continue
+        if typo := [x for x in ("view", "until") if not isinstance(args.get(x, ""), str)]:
+            errors.append(f"{w}: {typo[0]} must be a string")
+            continue
         parsed[k] = args
-        old = views.get(str(args["view"])) if "view" in args else None
+        old = views.get(args["view"]) if "view" in args else None
         if old is not None and old[0] != v.primitive:
             errors.append(f"{w}: view {args['view']!r} continues a {old[0]}, not a {v.primitive}")
             continue
         if old is None:
             _schema(dict(catalog[v.primitive]), args, w, errors)
         else:
+            own: dict[str, Any] = {x: args[x] for x in ("until", "replaces") if x in args}
+            keep = ("view", *own)
+            if diff := sorted(x for x in args if x not in keep and args[x] != old[1].get(x)):
+                errors.append(f"{w}: a continued view keeps its args; drop {diff}")
             live = old[2] and v.at is None
             if live:
                 old[1]["persist"] = True
@@ -258,10 +272,10 @@ def plan(
                 for a in old[1]["actions"]
                 if a["do"] != "indicate"
             ]
-            own = {x: args[x] for x in ("until", "replaces") if x in args}
             drop = ("persist", "until", "replaces", "enter")
             base = {x: y for x, y in old[1].items() if x not in drop}
-            args = base | ({"enter": "none"} if live else {}) | {"actions": state} | own
+            fresh = {"enter": "none"} if live else {}
+            args = base | fresh | {"resume": True, "actions": state} | own
         for ref in _refs(args):
             if not isinstance(ref["data"], int) or not 0 <= ref["data"] < len(ds.data):
                 errors.append(f"{w}: array ref {ref} names no data request")
@@ -289,7 +303,7 @@ def plan(
         lives.append((str(args.get("region", "main")), t0, t1, w))
         visuals.append((v.primitive, args, v.at))
         if "view" in args:
-            views[str(args["view"])] = (v.primitive, args, False)
+            views[args["view"]] = (v.primitive, args, False)
     for i, (r, a0, a1, wa) in enumerate(lives):
         for s, b0, b1, wb in lives[i + 1 :]:
             if (r == s or frozenset({r, s}) in OVERLAPS) and a0 < b1 and b0 < a1:

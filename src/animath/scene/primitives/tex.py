@@ -9,7 +9,18 @@ from animath.scene.layout import Box
 from animath.scene.primitives.base import ENTER_S, Args, Context, Cue, Primitive, enter, path
 
 CONTROL = re.compile(r"\\[A-Za-z]+")
+ARG = re.compile(
+    r"(\^|_|\\(?:hat|bar|vec|tilde|dot|ddot|check|breve|widehat|widetilde|overline|underline"
+    r"|mathbf|mathrm|mathcal|mathbb|mathsf|mathit|boldsymbol)(?![A-Za-z]))\s*"
+    r"(\\[A-Za-z]+(?![A-Za-z])(?!\s*[{\[])|[^\s{}\[\]\\])"
+)
 SHOWN = "animath_shown"
+
+
+def braced(tex: str) -> str:
+    """Undelimited arguments of scripts and accents in braces, `x^2` to `x^{2}`, so isolating
+    one cuts no macro argument."""
+    return ARG.sub(r"\1{\2}", tex)
 
 
 def whole(tex: str, a: int, b: int) -> bool:
@@ -42,13 +53,13 @@ class IsoTex(Isolate, Tex):  # type: ignore[misc]
 
 
 def selectors(a: Args) -> list[str]:
-    return sorted({s for x in a.actions for s in x.parts})
+    return sorted({braced(s) for x in a.actions for s in x.parts})
 
 
 def tex_part(m: Mobject, sel: str) -> Mobject:
     """All occurrences of the TeX `sel` isolated at build, else a dotted index path."""
     groups = getattr(m, "id_to_vgroup_dict", {})
-    hit = [groups[i] for t, i in getattr(m, "matched_strings_and_ids", []) if t == sel]
+    hit = [groups[i] for t, i in getattr(m, "matched_strings_and_ids", []) if t == braced(sel)]
     return VGroup(*hit) if hit else path(m, sel)
 
 
@@ -71,7 +82,7 @@ class Text(Primitive[TextArgs]):
     args = TextArgs
 
     def build(self, a: TextArgs, ctx: Context, cell: Box) -> Mobject:
-        return IsoTex(a.text, substrings_to_isolate=selectors(a))
+        return IsoTex(braced(a.text), substrings_to_isolate=selectors(a))
 
     def part(self, m: Mobject, a: TextArgs, sel: str) -> Mobject:
         return tex_part(m, sel)
@@ -84,7 +95,7 @@ class Equation(Primitive[EquationArgs]):
     args = EquationArgs
 
     def build(self, a: EquationArgs, ctx: Context, cell: Box) -> Mobject:
-        return IsoMathTex(a.latex, substrings_to_isolate=selectors(a))
+        return IsoMathTex(braced(a.latex), substrings_to_isolate=selectors(a))
 
     def part(self, m: Mobject, a: EquationArgs, sel: str) -> Mobject:
         return tex_part(m, sel)
@@ -96,7 +107,7 @@ class Derive(Primitive[DeriveArgs]):
 
     name = "derive"
     args = DeriveArgs
-    verbs = timed = ("next",)
+    verbs = ("next",)
 
     @staticmethod
     def times(n: int, t0: float, t1: float) -> list[float]:
@@ -109,7 +120,7 @@ class Derive(Primitive[DeriveArgs]):
         return m
 
     def cues(self, m: Mobject, a: DeriveArgs, t0: float, t1: float) -> list[Cue]:
-        first = Cue(t0, ENTER_S, partial(enter, m[0]))
+        first = Cue(t0, ENTER_S, lambda: enter(self.first(m)))
         n = sum(x.do == "next" for x in a.actions)
         if n >= len(m):
             raise AnimateError(f"{n} next actions for {len(m)} steps")
@@ -121,11 +132,13 @@ class Derive(Primitive[DeriveArgs]):
 
     def act(self, m: Mobject, a: DeriveArgs, verb: str, parts: list[str]) -> Animation:
         k = getattr(m, SHOWN) + 1
+        if k == len(m):
+            raise AnimateError(f"next after the last of {len(m)} steps")
         setattr(m, SHOWN, k)
         return TransformMatchingTex(m[k - 1], m[k])
 
     def first(self, m: Mobject) -> Mobject:
-        return m[0]
-
-    def last(self, m: Mobject) -> Mobject:
+        """The step shown, also at exit; initial `next` actions start later steps."""
         return m[getattr(m, SHOWN)]
+
+    last = first

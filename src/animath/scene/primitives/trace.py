@@ -36,7 +36,7 @@ class Trace(Primitive[TraceArgs]):
 
     name = "trace"
     args = TraceArgs
-    verbs = timed = ("goto",)
+    verbs = ("goto",)
 
     def build(self, a: TraceArgs, ctx: Context, cell: Box) -> Mobject:
         probe = Text("Mg", font=FONT, font_size=24)

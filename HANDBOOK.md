@@ -200,7 +200,7 @@ rounded to 1 ms. The narration speaks at `wpm` with the same gaps and pauses, so
 $$D_q = \max\big(D_1 s^{-q},\; n \cdot 1\ \text{s}\big). \tag{7.5}$$
 Brief lines map one to one onto passes (`{}` replaced by the item), or one brief line carries all passes back to back. A brief line's pause grows until its slot $\sigma_b \ge \sum D_q$ of its passes; action $j$ of pass $q$, at offset $O_q$ within that slot, becomes `Action{at: b, frac: (O_q + \tau_j D_q/D_1)/\sigma_b, rate: D_1/D_q}` with `{}` replaced by item $q$.
 
-7.4 Views. A visual whose args name a `view` continues the last visual of that view, in its own or an earlier scene; the primitive must match. It takes the old args (without `persist`, `until`, `replaces`, `enter`) and the old actions (without `indicate`) as initial state (`at: null`), then its own actions, `until` and `replaces`. If the old visual is on screen at the end of the previous scene (no `until`) and the new one has no `at`, the new one gets `enter: none` and the old one `persist: true`, so the cut is seamless. Otherwise the view enters again with its state, for example morphing back by `replaces` from a zoom that held its region.
+7.4 Views. A visual whose args name a `view` continues the last visual of that view, in its own or an earlier scene; the primitive must match. It takes the old args (without `persist`, `until`, `replaces`, `enter`), `resume: true`, and the old actions (without `indicate`) as initial state (`at: null`), then its own actions, `until` and `replaces`; other args that differ from the old ones are an error. If the old visual is on screen at the end of the previous scene (no `until`) and the new one has no `at`, the new one gets `enter: none` and the old one `persist: true`, so the cut is seamless. Otherwise the view enters again with its state, for example morphing back by `replaces` from a zoom that held its region.
 
 **Algorithm 7.2 (validation).** Errors are collected, not raised:
 
@@ -214,7 +214,9 @@ Brief lines map one to one onto passes (`{}` replaced by the item), or one brief
 | morphs | `replaces` names an earlier visual whose `until` equals this `at` |
 | regions | lifetimes $[\iota(\texttt{at}), \iota(\texttt{until}))$ in line indices, defaults $0$ and $m$; overlapping lifetimes need disjoint regions (`main` meets `left`, `right`) |
 | motion | estimated changes (entries, exits, actions at their onsets) at most 7 s apart, from 0 to $E_i$ |
-| loop | at least two items and one line; $s \ge 1$; one brief line per later item, or one |
+| loop | at least two items and one line; $s \ge 1$; one brief line per later item, or one without `{}` |
+| lines | bookmarks do not start with `#` (kept for unnamed lines); pauses, computed ones included, in $[0, 30]$ s |
+| views | `view` and `until` are strings; a continued view keeps its args (§7.4) |
 | scene | at least one visual; nodes within the selection; `Scene` validators |
 | board | (7.3); seed coverage $\ge 0.9$ ($Q_5$); unique scene ids |
 
@@ -311,7 +313,7 @@ Numerical arguments are literals or `ArrayRef` $(i, a)$: array $a$ of the `DataS
 | `trace` | `lines` (plain text, not TeX), `steps` (line indices) | monospace listing, cursor at `steps[0]`; visits the others uniformly unless `goto` actions move it | `line:k` (0-based), `cursor` | `goto` |
 | `code` | `code` (§9.10) | generated | index paths | the snippet's `act` |
 
-Every primitive also accepts dotted index paths (`1.0`) as parts. A TeX part isolates every occurrence of the substring that cuts no control word (`t` is not isolated inside `\to`).
+Every primitive also accepts dotted index paths (`1.0`) as parts. A TeX part isolates every occurrence of the substring that cuts no control word (`t` is not isolated inside `\to`). Undelimited arguments of `^`, `_` and accent or font macros are braced first (`x^2` to `x^{2}`, `\hat x` to `\hat{x}`), since an isolation marker before such an argument breaks the TeX; cuts inside braces are safe.
 
 9.3 Semantic grid. For frame $F = [-W/2, W/2] \times [-H/2, H/2]$, $H = 8$, $W = 8w/h$, a region with normalized box $(u_0, v_0, u_1, v_1)$ occupies
 $$C = [-W/2 + u_0 W,\; -W/2 + u_1 W] \times [-H/2 + v_0 H,\; -H/2 + v_1 H]. \tag{9.1}$$
@@ -339,11 +341,11 @@ Actions change parts in place, so the box measured at build bounds the visual un
 | Cue | Start | Run time |
 |---|---|---|
 | entry | $t_0$ | 1.5 s (`Write` or `FadeIn`); 1.2 s morph from visual $k$ (`TransformMatchingTex` between formulas, else `ReplacementTransform`) when `replaces`; 0 when `enter: none` |
-| action | $\min\big(\max(t_e, t_a),\; t_1 - 0.6 - r\big)$, but not before $t_e$ | $r = \max(0.25,\ 1/\texttt{rate})$ s |
+| action | $\min\big(\max(t_e, t_a),\; t_x - r\big)$, but not before $t_e$ | $r = \min\big(\max(0.25,\ 1/\texttt{rate}),\ t_x - t_e\big)$ s, so it ends by $t_x$; an error if $r < 0.25$ |
 | own | spread by the primitive over $[t_e, t_x)$; an error if $t_e \ge t_x$ | ends by $t_x$: `derive` steps $\min(1,\ 0.8\,s)$, `trace` moves $\min(0.4,\ 0.8\,s)$ for slot $s$ |
 | exit | $t_x = \max(t_0, t_1 - 0.6)$ | 0.6 s `FadeOut`; none if replaced, or if `persist` without `until` ($t_x = t_1$) |
 
-Here $t_e$ is the end of the entry and $t_a$ the action time: the onset of `word` (case and punctuation ignored) within the slot $[\tau_{\texttt{at}}, \tau_{\text{next}})$ of its bookmark, else $\tau_{\texttt{at}} + \texttt{frac}\,(\tau_{\text{next}} - \tau_{\texttt{at}})$. An action with `at: null` is initial state, applied without frames at build; verbs listed as timed by the primitive (`next`, `goto`) need a bookmark. Generic verbs on parts: `show` (parts hidden at build, then written, or faded in if not vector), `hide`, `dim` (opacity 0.2), `indicate` (`Indicate`, or `Circumscribe` if not vector), `mark` (colour, default yellow), `unmark` (restore the built style). Verbs change mobjects in place; the end state of each is the start of the next.
+Here $t_e$ is the end of the entry and $t_a$ the action time: the onset of `word` (case and punctuation ignored) within the slot $[\tau_{\texttt{at}}, \tau_{\text{next}})$ of its bookmark, else $\tau_{\texttt{at}} + \texttt{frac}\,(\tau_{\text{next}} - \tau_{\texttt{at}})$. An action with `at: null` is initial state, applied without frames at build, primitive verbs included (`next` starts a derive at a later step). A visual with `resume`, set by the planner on continued views (§7.4) and absent from the catalog, starts where the view left off: the own animations of its initial state are applied at build too (a derive without `next` shows its last step), and it has no others. Generic verbs on parts: `show` (parts hidden at build, then written, or faded in if not vector), `hide`, `dim` (opacity 0.2), `indicate` (`Indicate`, or `Circumscribe` if not vector), `mark` (colour, default yellow), `unmark` (restore the built style). Verbs change mobjects in place; the end state of each is the start of the next.
 
 **Algorithm 9.2 (schedule).** Input cues $(t_k, r_k)$, frame rate $f$, $N = \operatorname{round}(Tf)$.
 1. $a_k = \operatorname{round}(t_k f)$; drop cues with $a_k \ge N$; $n_k = \min(\operatorname{round}(r_k f), N - a_k)$.
@@ -360,7 +362,7 @@ Overlapping cues keep their own run times, every cue starts on its own frame ($Q
 3. Build failures (e.g. LaTeX errors) are re-raised as `AnimateError` naming `scene.visual:primitive`, for the repair loop; a cue failing while it plays names its action.
 4. Tests run Manim under `tempconfig` with a temporary `media_dir`; nothing is written to the working tree.
 5. `Scene.play` begins every animation at its start; `Delayed` defers `begin` to its own frame, because `.animate` targets, `last()` of a derivation and morph sources depend on the state at that moment.
-6. `TransformMatchingTex` replaces its source by its target in the scene; `derive` tracks the step shown, and exits and morphs read it when they play.
+6. `TransformMatchingTex` replaces its source by its target in the scene; `derive` tracks the step shown, and entries, exits and morphs read it when they play.
 7. Cairo `Scene.remove` of a part splits its visual into the remaining parts at the top level. `Clip.remove` also drops those parts when the visual leaves, and `Clip.replace` removes and adds when a morph source was split. A `play` in which nothing on screen moves redraws every frame: Manim would draw the entering mobject over a cached frame and so draw translucent mobjects (`dim`) twice.
 
 9.9 Scene generation (WP8). `scene.animate(scene, data, narration, store, llm, params) -> (SceneRender, Usage)` realizes $\Phi_5$; `data` maps request digests to `DataSet`; `Usage` sums every LLM call of the invocation (codegen, repair, critic) and is zero on a key hit. With $\pi_5$ = (`width`, `height`, `fps`, `wpm`, `max_retries`) and $D_s = [d(\text{DataSet of } r) \text{ or null} : r \in \texttt{scene.data}]$,

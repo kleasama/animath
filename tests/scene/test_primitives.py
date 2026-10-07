@@ -46,6 +46,7 @@ def test_catalog() -> None:
     assert set(cat) == names
     assert all(
         {"region", "until", "actions", "view"} <= set(cast(dict[str, Any], s["properties"]))
+        and "resume" not in cast(dict[str, Any], s["properties"])
         for s in cat.values()
     )
 
@@ -127,6 +128,11 @@ def test_tex_parts(store: Store) -> None:
     )
     eq = p.build(a, context(store), MAIN)
     assert len(p.part(eq, a, "L_{21}").family_members_with_points()) == 3
+    acts = [{"at": "a", "do": "mark", "parts": [s]} for s in ("2", "x", "A^T")]
+    a = p.args.model_validate({"latex": r"x^2 + \hat x + A^T", "actions": acts})
+    eq = p.build(a, context(store), MAIN)
+    assert eq.get_tex_string() == r"x^{2} + \hat{x} + A^{T}"
+    assert [len(p.part(eq, a, s)) for s in ("2", "x", "A^T")] == [1, 2, 1]
     t = PRIMITIVES["text"]
     ta = t.args.model_validate(
         {"text": "a cluster $t$", "actions": [{"do": "dim", "parts": ["cluster"]}]}
@@ -209,6 +215,8 @@ def test_derive_next(store: Store) -> None:
     assert p.last(m) is m[1]
     p.act(m, a, "next", [])
     assert p.last(m) is m[2]
+    with pytest.raises(AnimateError, match="next after the last of 3 steps"):
+        p.act(m, a, "next", [])
     too_many = p.args.model_validate({"steps": ["a", "b"], "actions": [nxt, nxt]})
     with pytest.raises(AnimateError, match="2 next actions for 2 steps"):
         p.cues(p.build(too_many, context(store), MAIN), too_many, 0.0, 1.0)

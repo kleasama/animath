@@ -56,7 +56,8 @@ def test_position() -> None:
     assert position("Select", "we select a cluster") == 0.25
     assert position("cluster,", "we select a Cluster.") == 0.75
     assert position("sel", "we select a cluster") is None
-    assert position("value", "the $x + y$ value") == pytest.approx(2 / 3)
+    assert position("value", "the $x + y$ value") == pytest.approx(0.8)
+    assert position("axis", "the $x$-axis") == pytest.approx(2.5 / 3.5)
     assert position("x", "the $x$ value") is None
     assert position("", "a b") is None
 
@@ -121,6 +122,7 @@ def test_after_lines_follow_the_loop() -> None:
         (DLoop(over=["1", "2"], lines=[], brief=["b"]), "needs two items, lines"),
         (DLoop(over=["1", "2"], lines=[line(1)], brief=["b"], speedup=0.5), "speedup >= 1"),
         (DLoop(over=["1", "2", "3", "4"], lines=[line(1)], brief=["b", "c"]), "one for all"),
+        (DLoop(over=["1", "2", "3"], lines=[line(1)], brief=["all {}"]), "{} needs one brief"),
     ],
 )
 def test_loop_rejects(loop: DLoop, message: str) -> None:
@@ -257,7 +259,7 @@ def test_view_continues(sel: Selection, cat: Cat, kernels: Cat) -> None:
     d = make_draft()
     d.scenes[0].visuals[2] = vis("equation", latex="A = LU", region="title", view="op")
     d.scenes[0].narration[1].actions[:] = [act(2, parts=["L"]), act(2, "indicate", parts=["U"])]
-    d.scenes[1].visuals.append(vis("equation", region="footer", view="op", until="#1"))
+    d.scenes[1].visuals.append(vis("equation", view="op", until="#1"))
     d.scenes[1].narration[0].actions.append(act(2, "unmark", parts=["L"]))
     board, errs = build(d, sel, T, cat, kernels)
     assert errs == []
@@ -269,6 +271,7 @@ def test_view_continues(sel: Selection, cat: Cat, kernels: Cat) -> None:
         "region": "title",
         "view": "op",
         "enter": "none",
+        "resume": True,
         "until": "#1",
         "actions": [
             {"do": "mark", "parts": ["L"]},
@@ -284,7 +287,7 @@ def test_view_returns_after_a_zoom(sel: Selection, cat: Cat, kernels: Cat) -> No
     s1 = d.scenes[0].visuals
     s1[2] = vis("equation", latex="A = LU", region="title", view="op", until="b")
     s1.append(vis("equation", "b", latex="L", region="title", replaces=2, until="c"))
-    s1.append(vis("equation", "c", region="footer", view="op", replaces=3))
+    s1.append(vis("equation", "c", view="op", replaces=3))
     d.scenes[1].visuals.append(vis("equation", view="op"))
     board, errs = build(d, sel, T, cat, kernels)
     assert errs == []
@@ -293,8 +296,12 @@ def test_view_returns_after_a_zoom(sel: Selection, cat: Cat, kernels: Cat) -> No
     state = [{"do": "mark", "parts": ["L"]}]
     first, back = board.scenes[0].visuals[2].args, board.scenes[0].visuals[4].args
     assert "persist" not in first
-    assert back == op | {"replaces": 3, "actions": state, "persist": True}
-    assert board.scenes[1].visuals[2].args == op | {"enter": "none", "actions": state}
+    assert back == op | {"replaces": 3, "resume": True, "actions": state, "persist": True}
+    assert board.scenes[1].visuals[2].args == op | {
+        "enter": "none",
+        "resume": True,
+        "actions": state,
+    }
 
 
 def test_view_reenters_after_a_scene_without_it(sel: Selection, cat: Cat, kernels: Cat) -> None:
@@ -303,7 +310,8 @@ def test_view_reenters_after_a_scene_without_it(sel: Selection, cat: Cat, kernel
     d.scenes.append(
         DScene(id="s3", goal="g", narration=[line(10)], visuals=[vis("equation", view="op")])
     )
-    board, errs = build(d, sel, T + 10 * 60 / 135 + 1.0, cat, kernels)
+    longer = T + 10 * 60 / 135 + 1.0
+    board, errs = build(d, sel, longer, cat, kernels)
     assert errs == []
     assert board is not None
     assert "persist" not in board.scenes[0].visuals[2].args
@@ -311,8 +319,54 @@ def test_view_reenters_after_a_scene_without_it(sel: Selection, cat: Cat, kernel
         "latex": "A",
         "region": "title",
         "view": "op",
+        "resume": True,
         "actions": [],
     }
+    d.scenes[2].visuals[0] = vis("equation", view="op", latex="B", region="title")
+    assert build(d, sel, longer, cat, kernels)[1] == [
+        "scene s3.visual[0]: a continued view keeps its args; drop ['latex']"
+    ]
+
+
+def test_continued_derive_keeps_its_step(sel: Selection, cat: Cat, kernels: Cat) -> None:
+    d = make_draft()
+    d.scenes[0].visuals[2] = vis("derive", steps=["a", "b", "c"], region="title", view="d")
+    d.scenes[0].narration[1].actions.append(act(2, "next"))
+    d.scenes[1].visuals.append(vis("derive", view="d"))
+    board, errs = build(d, sel, T, cat, kernels)
+    assert errs == []
+    assert board is not None
+    new = board.scenes[1].visuals[2].args
+    assert (new["resume"], new["actions"]) == (True, [{"do": "next", "parts": []}])
+
+
+@pytest.mark.parametrize(
+    ("args", "message"),
+    [({"view": ["a"]}, "view must be a string"), ({"until": 3}, "until must be a string")],
+)
+def test_malformed_view_or_until(
+    args: dict[str, Any], message: str, sel: Selection, cat: Cat, kernels: Cat
+) -> None:
+    d = make_draft()
+    d.scenes[1].visuals.append(vis("equation", latex="x", region="title", **args))
+    assert errors(d, sel, cat, kernels) == [f"scene s2.visual[2]: {message}"]
+
+
+def test_script_bounds() -> None:
+    errs: list[str] = []
+    lines = [DLine(text="a", bookmark="#1"), DLine(text="b", pause=-1.0), DLine(text="c")]
+    script(DScene(id="s", goal="g", narration=lines, visuals=[]), 60, errs)
+    assert errs == [
+        "scene s.narration[0]: bookmark '#1': # is kept for unnamed lines",
+        "scene s.narration[1]: pause -1.00 s outside [0, 30] s",
+    ]
+    errs.clear()
+    first = DLine(text="a b c d", actions=[act(parts=["x{}"])])
+    lp = DLoop(over=[str(i) for i in range(12)], lines=[first], brief=["e"], speedup=1.0)
+    script(DScene(id="s", goal="g", narration=[], loop=lp, visuals=[]), 60, errs)
+    assert len(errs) == 1
+    assert errs[0].startswith("scene s.loop.brief[0]: pause ")
+    assert errs[0].endswith(" s outside [0, 30] s")
 
 
 def test_view_needs_same_primitive(sel: Selection, cat: Cat, kernels: Cat) -> None:

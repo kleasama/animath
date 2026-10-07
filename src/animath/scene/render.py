@@ -112,7 +112,8 @@ class Item:
 def actions(
     p: Primitive[Any], a: Args, m: Mobject, tl: Timeline, t0: float, t1: float, name: str
 ) -> list[Cue]:
-    """Initial-state actions applied now; timed ones as cues between the entry and the exit."""
+    """Initial-state actions applied now; timed ones as cues within [t0, t1), between the end
+    of the entry and the start of the exit, shortened to fit but not below MIN_S."""
     sels = {s for x in a.actions for s in x.parts or [""]}
     parts = {s: p.part(m, a, s) if s else m for s in sorted(sels)}
     orig = {s: q.copy() for s, q in parts.items()}
@@ -121,8 +122,6 @@ def actions(
             raise AnimateError("show needs parts")
         if x.do not in VERBS and not p.knows(m, x.do):
             raise AnimateError(f"unknown verb {x.do!r}; known: {[*VERBS, *p.verbs]}")
-        if x.at is None and x.do in p.timed:
-            raise AnimateError(f"{x.do} needs a bookmark")
         for s in x.parts if x.do == "show" else ():
             parts[s].set_opacity(0.0)
 
@@ -139,10 +138,10 @@ def actions(
         if x.at is None:
             instant(make(x))
             continue
-        rt = max(MIN_S, VERB_S / x.rate)
-        t = max(t0, min(tl.time(x), t1 - EXIT_S - rt))
-        if t >= t1:
-            raise AnimateError(f"{what}: no time left after the entry, before {t1:.2f} s")
+        rt = min(max(MIN_S, VERB_S / x.rate), t1 - t0)
+        if rt < MIN_S:
+            raise AnimateError(f"{what}: no room between the entry end {t0:.2f} s and {t1:.2f} s")
+        t = max(t0, min(tl.time(x), t1 - rt))
         out.append(Cue(t, rt, partial(make, x), m, f"{what} at {t:.2f} s"))
     return out
 
@@ -171,15 +170,16 @@ def entry(
         q, mk = PRIMITIVES[scene.visuals[k].primitive], items[k].mobject
         return Cue(cue.t, MORPH_S, lambda: morph(q.last(mk), p.first(m)), Group(mk, m))
     if a.enter == "none":
-        return Cue(cue.t, 0.0, partial(FadeIn, p.first(m)), m)
+        return Cue(cue.t, 0.0, lambda: FadeIn(p.first(m)), m)
     if a.enter == "fade":
-        return Cue(cue.t, ENTER_S, partial(FadeIn, p.first(m)), m)
+        return Cue(cue.t, ENTER_S, lambda: FadeIn(p.first(m)), m)
     return replace(cue, mobject=m)
 
 
 def compose(scene: Scene, ctx: Context, tl: Timeline, f: Box) -> list[Item]:
     """Build every visual, fit it into its grid cell, and attach entry, action and exit cues;
-    a primitive's own animations run between its entry and its exit."""
+    a primitive's own animations run between its entry and its exit; a visual resuming a view
+    applies at build those of its initial state."""
     items: list[Item] = []
     gone = {v.args.get("replaces") for v in scene.visuals}
     for i, v in enumerate(scene.visuals):
@@ -207,11 +207,16 @@ def compose(scene: Scene, ctx: Context, tl: Timeline, f: Box) -> list[Item]:
             own = p.cues(m, a, t0, end)
             first = entry(p, a, m, own[0], items, scene, i)
             go = first.t + first.run_time
-            if len(own) > 1:
+            if a.resume:
+                old = a.model_copy(update={"actions": [x for x in a.actions if x.at is None]})
+                for x in p.cues(m, old, t0, end)[1:]:
+                    instant(prepare_animation(x.play()))
+                own = own[:1]
+            elif len(own) > 1:
                 if go >= end:
                     raise AnimateError(f"no time for its animations in [{go:.2f}, {end:.2f}) s")
                 own = own[:1] + p.cues(m, a, go, end)[1:]
-            later = actions(p, a, m, tl, go, t1, name)
+            later = actions(p, a, m, tl, go, end, name)
         except AnimateError as e:
             raise AnimateError(f"{name}: {e}") from e
         except Exception as e:

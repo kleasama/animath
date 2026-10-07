@@ -179,10 +179,6 @@ def test_compose_actions(store: Store) -> None:
         (eq(actions=[{"at": "a", "do": "fly"}]), "unknown verb 'fly'; known: "),
         (eq(actions=[{"at": "a", "do": "dim", "parts": ["q"]}]), "no part 'q'"),
         (eq(replaces=0), "replaces 0: needs an earlier visual"),
-        (
-            Visual(primitive="derive", args={"steps": ["a", "b"], "actions": [{"do": "next"}]}),
-            "next needs a bookmark",
-        ),
     ],
 )
 def test_compose_rejects(store: Store, visual: Visual, match: str) -> None:
@@ -203,11 +199,33 @@ def test_compose_own_cues_run_between_entry_and_exit(store: Store) -> None:
         compose(scn(d), context(store), tl, F)
 
 
-def test_compose_needs_time_after_entry(store: Store) -> None:
-    tl = Timeline({"a": 0.0, "b": 1.0}, 4.0)
-    v = eq(until="b", actions=[{"at": "a", "do": "dim"}])
-    with pytest.raises(AnimateError, match=r"no time left after the entry, before 1\.00 s"):
+@pytest.mark.parametrize("until", [1.8, 1.0])
+def test_compose_actions_end_before_the_exit(store: Store, until: float) -> None:
+    v = eq(until="b", actions=[{"at": "a", "do": "show", "parts": ["x"]}])
+    tl = Timeline({"a": 0.0, "b": until}, 4.0)
+    with pytest.raises(AnimateError, match=r"show x: no room between the entry end 1\.50 s and"):
         compose(scn(v), context(store), tl, F)
+    (it,) = compose(scn(v), context(store), Timeline({"a": 0.0, "b": 3.0}, 4.0), F)
+    show = it.cues[1]
+    assert (show.t, show.run_time) == pytest.approx((ENTER_S, 3.0 - EXIT_S - ENTER_S))
+    assert show.t + show.run_time == pytest.approx(it.cues[2].t)
+
+
+def test_compose_resumes_a_view(store: Store) -> None:
+    steps = {"steps": ["a", "b", "c"], "enter": "fade"}
+    nxt, late = [{"do": "next"}], [{"at": "a", "do": "next"}]
+    for args, shown, n in (
+        ({}, 0, 4),
+        ({"actions": nxt}, 1, 2),
+        ({"resume": True}, 2, 2),
+        ({"resume": True, "actions": late}, 2, 3),
+    ):
+        (it,) = compose(scn(Visual(primitive="derive", args=steps | args)), context(store), TL, F)
+        assert len(it.cues) == n
+        entered: object = it.cues[0].play().mobject
+        assert entered is it.mobject[shown]
+    with pytest.raises(AnimateError, match="next after the last of 3 steps"):
+        it.cues[1].play()
 
 
 def frames_of(path: str) -> list[np.ndarray]:
