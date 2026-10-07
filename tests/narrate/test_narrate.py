@@ -81,13 +81,13 @@ def test_narrate_produces_valid_narrations(store: Store, verbalizer: Verbalizer)
     assert tts.calls == [("Minimise ex over K.", 1.0), ("Stop.", 1.0), ("Restart.", 1.0)]
     n = store.get(Narration, out["s1"])
     assert n.scene_id == "s1"
-    assert n.bookmarks == {"k": 0.303}
+    assert n.bookmarks == {"k": 0.4}
     assert [w.text for w in n.words] == ["Minimise", "ex", "over", "K.", "Stop."]
     assert [c.text for c in n.captions] == ["Minimise", "r", "over", "K.", "Stop."]
     assert [(c.start, c.end) for c in n.captions] == [(w.start, w.end) for w in n.words]
-    assert (n.words[3].end, n.words[4].start) == (0.463, 0.725)
-    assert n.duration_s == (300 + 172 + 250 + 52 + 600) / 1000
-    assert from_wav(store.get_blob(n.audio), 1000).size == 1374
+    assert (n.words[3].end, n.words[4].start) == (0.56, 0.91)
+    assert n.duration_s == (400 + 160 + 350 + 40 + 600) / 1000
+    assert from_wav(store.get_blob(n.audio), 1000).size == 1550
     assert store.lookup(Narration, key(BOARD.scenes[1], tts, verbalizer, 1.0)) is not None
 
 

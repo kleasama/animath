@@ -52,17 +52,17 @@ def test_timeline_layout_words_and_marks() -> None:
     )
     u2 = ("x.", {"m3": 0, "end": 4}, 1.0, tone(100, lead=60), [(0, 160)])
     audio, words, marks = timeline([u1, u2], RATE)
-    assert audio.size == 300 + 550 + 450 + 160 + 1000
-    assert not audio[:300].any()
-    assert not audio[700:1300].any()
-    assert not audio[1460:].any()
-    assert (audio[400], audio[699]) == (8000, 8000)
+    assert audio.size == 350 + 550 + 500 + 160 + 1000
+    assert not audio[:450].any()
+    assert not audio[750:1460].any()
+    assert not audio[1560:].any()
+    assert (audio[450], audio[749]) == (8000, 8000)
     assert [(w.text, w.start, w.end) for w in words] == [
-        ("ab", 0.35, 0.46),
-        ("cdefg,", 0.5, 0.8),
-        ("x.", 1.3, 1.46),
+        ("ab", 0.4, 0.51),
+        ("cdefg,", 0.55, 0.85),
+        ("x.", 1.4, 1.56),
     ]
-    assert marks == {"m1": 0.35, "m2": 0.5, "m3": 1.3, "end": 1.3}
+    assert marks == {"m1": 0.4, "m2": 0.55, "m3": 1.4, "end": 1.4}
     n = Narration(
         scene_id="s",
         audio="0" * 64,
@@ -72,7 +72,15 @@ def test_timeline_layout_words_and_marks() -> None:
     )
     assert n.duration_s - n.words[-1].end == pytest.approx(1.0)
     short = timeline([(*u2[:2], 0.3, *u2[3:])], RATE)[0]
-    assert short.size == 300 + 160 + 600
+    assert short.size == 400 + 160 + 600
+
+
+def test_timeline_never_overlaps_audio() -> None:
+    early = ("y.", {"y": 0}, 0.0, tone(500), [(450, 500)])
+    audio, words, marks = timeline([early, early], RATE)
+    assert audio.size == 500 + 500 + 600
+    assert [(w.start, w.end) for w in words] == [(0.45, 0.5), (0.95, 1.0)]
+    assert marks == {"y": 0.95}
 
 
 def test_captions_time_written_tokens_by_their_spoken_words() -> None:

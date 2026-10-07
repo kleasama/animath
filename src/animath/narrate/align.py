@@ -7,7 +7,7 @@ from animath.core.schemas import Word
 from animath.narrate.tts import PCM, Spans
 
 FRAME_S, FLOOR_DB, PAD_S, FADE_S = 0.01, -60.0, 0.05, 0.01
-LEAD_S, GAP_S, TAIL_S = 0.3, 0.25, 0.6
+LEAD_S, GAP_S, TAIL_S = 0.4, 0.35, 0.6
 
 Utterance = tuple[str, Mapping[str, int], float, PCM, Spans]
 
@@ -41,19 +41,20 @@ def fade(pcm: PCM, rate: int) -> PCM:
 def timeline(
     utterances: Sequence[Utterance], rate: int
 ) -> tuple[PCM, list[Word], dict[str, float]]:
-    """Utterances trimmed by `bounds` and faded, after LEAD_S, each followed by GAP_S plus its
-    pause, the last by max(TAIL_S, pause).
+    """Utterances trimmed by `bounds` and faded, placed by their words: the first word at LEAD_S,
+    the first word of the next utterance GAP_S plus the pause after the last word of the previous
+    one, later only where audio would overlap; the end max(TAIL_S, pause) after the last word.
 
     Word times are the spans shifted to the timeline; a bookmark (name -> word index in its
     utterance) is the start of that word.
     """
-    pieces = [np.zeros(round(LEAD_S * rate), np.int16)]
-    pause = 0.0
+    clips: list[tuple[int, PCM]] = []
     words: list[Word] = []
     marks: dict[str, float] = {}
-    off = pieces[0].size
+    at, end, last, pause = round(LEAD_S * rate), 0, 0, 0.0
     for text, cues, pause, pcm, spans in utterances:
         a, b = bounds(pcm, rate, (spans[0][0], spans[-1][1]))
+        off = max(end, at - spans[0][0] + a)
         t = (off + np.clip(np.reshape(spans, (-1, 2)), a, b) - a) / rate
         ws = [
             Word(text=w, start=float(s), end=float(e))
@@ -61,10 +62,13 @@ def timeline(
         ]
         marks |= {m: ws[min(i, len(ws) - 1)].start for m, i in cues.items()}
         words += ws
-        pieces += [fade(pcm[a:b], rate), np.zeros(round((GAP_S + pause) * rate), np.int16)]
-        off += b - a + pieces[-1].size
-    pieces[-1] = np.zeros(round(max(TAIL_S, pause) * rate), np.int16)
-    return np.concatenate(pieces), words, marks
+        clips.append((off, fade(pcm[a:b], rate)))
+        end, last = off + b - a, off + spans[-1][1] - a
+        at = last + round((GAP_S + pause) * rate)
+    out = np.zeros(max(end, last + round(max(TAIL_S, pause) * rate)), np.int16)
+    for off, x in clips:
+        out[off : off + x.size] = x
+    return out, words, marks
 
 
 def captions(tokens: Sequence[tuple[str, str]], words: Sequence[Word]) -> list[Word]:
