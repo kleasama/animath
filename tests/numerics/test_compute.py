@@ -1,3 +1,4 @@
+import hashlib
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -59,7 +60,9 @@ def test_concurrent_requests_share_one_artifact(store: Store) -> None:
     assert len(list((store.root / "artifacts" / DataSet.kind).iterdir())) == 1
 
 
-def test_every_kind_runs_on_defaults(store: Store) -> None:
+def test_every_kind_runs_on_defaults(store: Store, tmp_path: Path) -> None:
+    f = tmp_path / "d.npz"
+    np.savez(f, x=np.ones(2))
     minimal = {
         "quadrature.rule": {"n": 2},
         "quadrature.convergence": {"integrand": "runge", "n_max": 5},
@@ -68,6 +71,7 @@ def test_every_kind_runs_on_defaults(store: Store) -> None:
         "krylov.gmres": {"operator": {"name": "poisson1d", "n": 4}},
         "krylov.cg": {"operator": {"name": "convdiff", "n": 4, "peclet": 0.0}},
         "h2.rss": {"n": 64, "leaf": 16},
+        "data.npz": {"path": str(f), "sha256": hashlib.sha256(f.read_bytes()).hexdigest()},
     }
     assert minimal.keys() == KINDS.keys()
     for kind, params in minimal.items():

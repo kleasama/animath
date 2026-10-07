@@ -283,6 +283,11 @@ def draw(
             out["box", t] = Spec(
                 *box(t), c, 0.3 if st.phase.get(t, 0) >= ELIM else 0.85, lo, 1.0, 1
             )
+            if SPLIT <= st.phase.get(t, 0) < ELIM:
+                bl, bb, br, bt = box(t)
+                xm, ym = bl + (br - bl) * w.k(t) / w.n0(t), bb + (bt - bb) / 4
+                out["psplit", t, 0] = Spec(bl, bb, xm, ym, BLUE.to_hex(), 1.0, z=2)
+                out["psplit", t, 1] = Spec(xm, bb, br, ym, RED.to_hex(), 1.0, z=2)
         for t, f in st.marks:
             if f == "select":
                 out["psel", t] = Spec(*box(t), lo, 0.0, hi, 6.0, 4)

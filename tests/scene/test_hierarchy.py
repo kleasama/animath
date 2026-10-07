@@ -251,6 +251,16 @@ def test_plate(w: Walk) -> None:
     assert draw(w, State(2), ("plate",))[0]["pcap",].text == "level 2: 4 clusters, top level"
 
 
+def test_plate_split_bar(w: Walk) -> None:
+    t = w.pick(4)[0]
+    out = draw(w, walk(w, {"do": "split"})[0], ("plate",))[0]
+    k, r = out["psplit", t, 0], out["psplit", t, 1]
+    assert (k.x1 - k.x0) / (r.x1 - r.x0) == pytest.approx(w.k(t) / (w.n0(t) - w.k(t)))
+    assert (k.x0, k.x1, r.x1) == pytest.approx((out["box", t].x0, r.x0, out["box", t].x1))
+    done = draw(w, walk(w, {"do": "eliminate"})[0], ("plate",))[0]
+    assert not [key for key in done if key[0] == "psplit"]
+
+
 def test_vanishing_items_sink_into_parents(w: Walk) -> None:
     st, _ = walk(w, {"do": "fill"})
     old = draw(w, st, ("plate", "operator"))[0]

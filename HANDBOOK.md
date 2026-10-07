@@ -235,6 +235,7 @@ Each array is one blob in `.npy` format (`allow_pickle=False`); `meta.version` $
 | `krylov.gmres` | `operator`, `tol`, `maxiter` $\le 256$, `ritz` | `x`, `residual`, `eigs`, `ritz`, `ritz_k` | `iterations`, `converged`, `true_residual` |
 | `krylov.cg` | `operator`, `tol`, `maxiter` | `x`, `residual`, `error_a`, `bound` | `kappa`, `iterations`, `converged` |
 | `h2.rss` | `geometry` ∈ {plate, sphere}, `n`, `leaf`, `eta`, `kappa`, `tol`, `precision` ∈ {single, double}, `seed` | `points`, `perm`, `box`, `range`, `near`, `far`, `dof` (CSR, with `_ptr`), `stage`, `stage_norm`, `dag`, `schur`, `schur_norm`, `fill`, `fill_norm`, `active`, `top` | `depth`, `top_level`, `top_size`, `colours`, `stages`, `error` |
+| `data.npz` | `path` (absolute, `.npz`), `sha256` | the archive's numeric members | its 0-d `meta` member, a JSON object |
 
 Operators (discriminator `name`): `poisson1d` $\operatorname{tridiag}(-1,2,-1)$; `convdiff` $\operatorname{tridiag}(-1-P,2,-1+P)$, $P$ the cell Péclet number; `efie` (§8.5); `dlp` (§8.6). Right-hand sides: $\mathbf{1}$, $\mathbf{1}$, $\mathbf{V}$, $g$.
 
@@ -293,6 +294,8 @@ Instance $n = 4096$, `leaf` 64 ($d = 6$), $\eta = 2.5$, $\kappa = 2\pi$, complex
 | 1e-5 | 0.39–0.72 | 4096, 1768, 1148, 507, 264 | 2.3e-6 |
 
 Implementation: GEMMs go through SciPy's BLAS (`get_blas_funcs`), since the NumPy and SciPy wheels bundle separate OpenBLAS builds whose thread pools contend when calls interleave (about 8× slower); 2-norms of tall blocks come from their thin-QR triangles; the reference matrix is assembled in 512-row slabs.
+
+8.9 File-backed data (`data.npz`). The archive is read once and its SHA-256 must equal `sha256`, so the key (8.1) pins the content and later runs need no file. Members load with `allow_pickle=False`; a mismatch, an unreadable archive, a non-numeric member or a `meta` that is not a JSON object raises `ComputeError`. The kind brings arrays computed elsewhere (for example by the user) into scenes; its schema tells the planner not to invent it.
 
 ## 9 Scenes and rendering
 
@@ -387,7 +390,7 @@ kept if it exists and a visual is alive; at most 6, evenly subsampled. A transie
 2. LaTeX precompile is the build phase of the draft render: `compose` builds every mobject before any frame, and build errors are localized.
 3. Unit tests use a queued fake LLM (`tests/scene/fake.py`); no network.
 
-9.15 `hierarchy` primitive. Draws an `h2.rss` DataSet (§8.8) from level $\lambda$ (default $d$, `done` stages already eliminated). Plate view (2-D points only): cluster boxes, grey or in their colour class, dimmed once eliminated. Operator view: the active matrix in tree order, block widths $\propto |B_t|$, rescaled to the full side on each level; near blocks orange, far blocks blue by level (darker is coarser, the background is the far field of level $\lambda$), fill amber, zeroed bands white, $S$ blue and $R$ red. Parts: `cluster` (BFS id on the level; `t` the first stage with the largest $|N(t)|$, `s` its next later neighbour; default the current cluster), `colour`, `block` $(a, b)$.
+9.15 `hierarchy` primitive. Draws an `h2.rss` DataSet (§8.8) from level $\lambda$ (default $d$, `done` stages already eliminated). Plate view (2-D points only): cluster boxes, grey or in their colour class, with a $k_t \mid r_t$ bar from split to eliminate, dimmed once eliminated. Operator view: the active matrix in tree order, block widths $\propto |B_t|$, rescaled to the full side on each level; near blocks orange, far blocks blue by level (darker is coarser, the background is the far field of level $\lambda$), fill amber, zeroed bands white, $S$ blue and $R$ red. Parts: `cluster` (BFS id on the level; `t` the first stage with the largest $|N(t)|$, `s` its next later neighbour; default the current cluster), `colour`, `block` $(a, b)$.
 
 | Action | Effect |
 |---|---|
@@ -590,3 +593,4 @@ $f$ the animate function's qualified name, $\pi_5$ = (`width`, `height`, `fps`, 
 | D9 | 2026-10-07 | Self-term of (8.7) is the exact cell integral | bounded, mesh-consistent diagonal |
 | D10 | 2026-10-07 | GEMMs in `h2` through SciPy's BLAS | NumPy and SciPy OpenBLAS pools contend (about 8×) |
 | D11 | 2026-10-07 | `hierarchy` morphs keyed items with per-item `Transform`s | `Scene.add` dissolves groups not yet in the scene |
+| D12 | 2026-10-07 | User-supplied arrays enter as `data.npz` by path and SHA-256 | external runs feed primitives without new kernels; the hash pins cache and content |
