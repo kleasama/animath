@@ -66,7 +66,7 @@ SIDE, GAP, CAP, RUN, MIN_DT = 4.0, 0.8, 0.6, 1.0, 0.1
 AMBER = "#FFBF00"
 PALETTE = tuple(ManimColor.from_rgb(c[:3]).to_hex() for c in colormaps["tab20"](np.arange(20)))
 ARRAYS = ("box", "range", "near_ptr", "near", "far_ptr", "far", "stage", "schur", "fill", "active")
-PART = re.compile(r"(?:([ts])|cluster:(\d+)|colour:(\d+)|block:(\d+),(\d+))?")
+PART = re.compile(r"(?:([ts])|cluster:(\d+)|colour:(\d+)|block:(\d+)[:,](\d+))?")
 TAKES = dict(colour=("cluster", "colour"), wave=("colour",), drop=("block",), coarsen=(), top=())
 
 
@@ -95,11 +95,11 @@ class Step(Model):
 
 
 def parse(sel: str) -> Part:
-    """Part named by a selector t, s, cluster:k, colour:c or block:a,b; empty: none."""
+    """Part named by a selector t, s, cluster:k, colour:c or block:a:b; empty: none."""
     g = PART.fullmatch(sel)
     if g is None:
         raise AnimateError(
-            f"hierarchy: no part {sel!r}; parts: t, s, cluster:k, colour:c, block:a,b"
+            f"hierarchy: no part {sel!r}; parts: t, s, cluster:k, colour:c, block:a:b"
         )
     ts, k, c, a, b = g.groups()
     return Part.model_validate({"cluster": ts or k, "colour": c, "block": a and (a, b)})
@@ -507,10 +507,11 @@ class Hierarchy(Primitive[HierarchyArgs]):
     """Plate and block-operator views of an h2.rss DataSet. Verbs walk its factorisation on the
     current level: select, footprint (N(t)), ring (two hops), clear, and the stage phases rotate,
     split, zero, eliminate, schur, fill take a cluster part (default the current one); colour a
-    cluster or colour class (default all); wave a colour class (default the next); drop a fill
-    block; coarsen and top none. Parts: t (a stage with most near neighbours), s (its next
-    neighbour), cluster:k, colour:c, block:a,b. `steps` share the visual's life equally; for
-    word timing and views use actions instead."""
+    cluster or colour class (default all, so the rest); wave a colour class (default the next);
+    drop a fill block; coarsen (which finishes the level) and top none. Parts: t (a stage with
+    most near neighbours), s (its next neighbour), cluster:k, colour:c, block:a:b. `steps` share
+    the visual's life equally; for word timing and views use actions instead, not both, since a
+    resumed view replays steps before actions."""
 
     name = "hierarchy"
     args = HierarchyArgs

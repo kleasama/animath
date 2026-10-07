@@ -320,7 +320,7 @@ def run(a: Animation) -> None:
 
 
 def test_parse() -> None:
-    sels = ("", "t", "s", "cluster:12", "colour:3", "block:5,6")
+    sels = ("", "t", "s", "cluster:12", "colour:3", "block:5:6")
     assert [parse(x) for x in sels] == [
         Part(),
         Part(cluster="t"),
@@ -329,7 +329,8 @@ def test_parse() -> None:
         Part(colour=3),
         Part(block=(5, 6)),
     ]
-    for bad in ("u", " t", "cluster:", "cluster:-1", "colour:x", "block:1"):
+    assert parse("block:5,6") == Part(block=(5, 6))
+    for bad in ("u", " t", "cluster:", "cluster:-1", "colour:x", "block:1", "block:1;2"):
         with pytest.raises(AnimateError, match=f"no part '{bad}'; parts: t, s, cluster:k"):
             parse(bad)
 
@@ -341,7 +342,7 @@ def test_named(w: Walk) -> None:
     assert named(w, State(4), ("operator",), parse("s")) == [("near", s, s)]
     assert named(w, State(4), both, parse("cluster:7")) == [("box", 7)]
     assert named(w, State(4), both, parse("colour:4")) == [("box", 19), ("box", 29)]
-    assert named(w, State(3), both, parse("block:3,4")) == [
+    assert named(w, State(3), both, parse("block:3:4")) == [
         ("near", 3, 4),
         ("far", 3, 4),
         ("fill", 3, 4),
