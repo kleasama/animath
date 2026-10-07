@@ -1,11 +1,12 @@
+import json
 from typing import Any
 
 import pytest
 from pydantic import JsonValue
 
 from animath.core.schemas import KnowledgeGraph, Node, NodeKind, Params
-from animath.plan.check import build, words
-from animath.plan.draft import DData, Draft, DScene
+from animath.plan.check import build, plan, position, script, static, words
+from animath.plan.draft import DAction, DData, DLine, DLoop, Draft, DScene
 from animath.plan.select import Selection, select
 from tests.plan.conftest import T, line, make_draft, vis
 
@@ -29,22 +30,140 @@ def edit(scene: int = 0, **kw: Any) -> Draft:
     return d
 
 
+def act(visual: int = 0, do: str = "mark", **kw: Any) -> DAction:
+    return DAction(visual=visual, do=do, **kw)
+
+
+def loop_scene(brief: list[str], speedup: float = 2.0) -> DScene:
+    """At 60 wpm one token lasts 1 s: pass 1 is 4 s of speech, 1 s hold and a 0.35 s gap."""
+    first = DLine(text="a b c d", actions=[act(parts=["x{}"], word="c")])
+    return DScene(
+        id="s",
+        goal="g",
+        narration=[],
+        loop=DLoop(over=["1", "2", "3"], lines=[first], brief=brief, speedup=speedup),
+        visuals=[vis("equation", latex="x_1 x_2 x_3")],
+    )
+
+
 def test_words() -> None:
-    assert words(r"Since $\frac{a}{b} = x_1$, done.") == 7
+    assert words(r"Since $\frac{a}{b} = x_1$, done.") == 2 + 1.5 * 5
     assert words("...") == 0
+
+
+def test_position() -> None:
+    assert position(None, "a b") == 0.0
+    assert position("Select", "we select a cluster") == 0.25
+    assert position("cluster,", "we select a Cluster.") == 0.75
+    assert position("sel", "we select a cluster") is None
+    assert position("value", "the $x + y$ value") == pytest.approx(0.8)
+    assert position("axis", "the $x$-axis") == pytest.approx(2.5 / 3.5)
+    assert position("x", "the $x$ value") is None
+    assert position("", "a b") is None
+
+
+def test_script_holds_and_bookmarks() -> None:
+    ds = DScene(
+        id="s",
+        goal="g",
+        narration=[line(2, "a"), line(3), line(1, "c")],
+        visuals=[vis("text", "c", text="t")],
+    )
+    errs: list[str] = []
+    beats = script(ds, 60, errs)
+    assert errs == []
+    assert [b.bookmark for b in beats] == ["a", "#1", "c"]
+    assert [b.pause for b in beats] == [0.0, 0.0, 1.0]
+    assert [b.onset for b in beats] == pytest.approx([0.0, 2.35, 5.7])
+
+
+def test_loop_per_item_brief() -> None:
+    errs: list[str] = []
+    beats = script(loop_scene(["e {}", "g"]), 60, errs)
+    assert errs == []
+    assert [b.text for b in beats] == ["a b c d", "e 2", "g"]
+    assert [b.pause for b in beats] == pytest.approx([1.0, 0.325, 1.0])
+    first = {"at": "#0", "do": "mark", "parts": ["x1"], "word": "c", "frac": 0.3738}
+    assert beats[0].acts == [(0, first)]
+    assert beats[1].acts == [
+        (0, {"at": "#1", "do": "mark", "parts": ["x2"], "frac": 0.3738, "rate": 2.0})
+    ]
+    assert beats[2].acts == [
+        (0, {"at": "#2", "do": "mark", "parts": ["x3"], "frac": 0.25, "rate": 4.0})
+    ]
+
+
+def test_loop_one_brief_for_all() -> None:
+    beats = script(loop_scene(["h {}"]), 60, [])
+    assert [b.text for b in beats] == ["a b c d", "h {}"]
+    assert beats[1].pause == pytest.approx(3.0125)
+    assert [(a["parts"], a["frac"], a["rate"]) for _, a in beats[1].acts] == [
+        (["x2"], 0.2492, 2.0),
+        (["x3"], 0.7913, 4.0),
+    ]
+
+
+def test_loop_floor_keeps_steps_readable() -> None:
+    beats = script(loop_scene(["e", "g"], speedup=8.0), 60, [])
+    assert [a["rate"] for b in beats[1:] for _, a in b.acts] == [5.35, 5.35]
+
+
+def test_after_lines_follow_the_loop() -> None:
+    ds = loop_scene(["e", "g"]).model_copy(update={"after": [line(1, "z")]})
+    assert [b.bookmark for b in script(ds, 60, [])] == ["#0", "#1", "#2", "z"]
+    assert script(DScene(id="s", goal="g", narration=[], visuals=[]), 60, []) == []
+
+
+@pytest.mark.parametrize(
+    ("loop", "message"),
+    [
+        (DLoop(over=[], lines=[line(1)], brief=["b"]), "needs two items, lines"),
+        (DLoop(over=["1"], lines=[line(1)], brief=["b"]), "needs two items, lines"),
+        (DLoop(over=["1", "2"], lines=[], brief=["b"]), "needs two items, lines"),
+        (DLoop(over=["1", "2"], lines=[line(1)], brief=["b"], speedup=0.5), "speedup >= 1"),
+        (DLoop(over=["1", "2", "3", "4"], lines=[line(1)], brief=["b", "c"]), "one for all"),
+        (DLoop(over=["1", "2", "3"], lines=[line(1)], brief=["all {}"]), "{} needs one brief"),
+    ],
+)
+def test_loop_rejects(loop: DLoop, message: str) -> None:
+    errs: list[str] = []
+    script(DScene(id="s", goal="g", narration=[line(1)], loop=loop, visuals=[]), 60, errs)
+    assert len(errs) == 1
+    assert message in errs[0]
+
+
+def test_word_must_be_spoken() -> None:
+    errs: list[str] = []
+    ln = DLine(text="the $t$ cluster", actions=[act(word="t")])
+    script(DScene(id="s", goal="g", narration=[ln], visuals=[]), 60, errs)
+    assert errs == ["scene s.narration[0].actions[0]: word 't' is no plain word of the line"]
+
+
+def test_static_stretches(sel: Selection, cat: Cat) -> None:
+    ds = DScene(id="s", goal="g", narration=[line(10)], visuals=[vis("text", text="t")])
+    p = plan(ds, sel, cat, {}, 60, {}, [])
+    assert static(p) == ["scene s: nothing changes for 11 s from scene s.narration[0]; add actions"]
+    ds.narration[0].actions.append(act(word="word"))
+    assert static(plan(ds, sel, cat, {}, 60, {}, [])) == [
+        "scene s: nothing changes for 11 s from scene s.narration[0]; add actions"
+    ]
+    ds.narration[:] = [line(5), line(5, None, act(do="indicate"))]
+    assert static(plan(ds, sel, cat, {}, 60, {}, [])) == []
 
 
 def test_valid_board(draft: Draft, sel: Selection, cat: Cat, kernels: Cat) -> None:
     board, errs = build(draft, sel, T, cat, kernels)
     assert errs == []
     assert board is not None
-    assert [s.duration_s for s in board.scenes] == [12.0, 8.0]
-    assert board.duration_s == T
+    assert [s.duration_s for s in board.scenes] == pytest.approx([16.869, 11.131], abs=1e-3)
+    assert board.duration_s == pytest.approx(T)
     assert board.symbols == {"Z": "impedance matrix"}
     s1 = board.scenes[0]
     assert s1.visuals[1].args["series"] == [
         {"x": [0, 1], "y": {"data": 0, "array": "current", "part": "abs"}}
     ]
+    assert s1.visuals[1].args["actions"] == [{"at": "#2", "do": "indicate", "parts": []}]
+    assert [(ln.bookmark, ln.pause_s) for ln in s1.narration] == [("a", 1), ("b", 1), ("#2", 1)]
     assert s1.data[0].params == {"ka": 1, "n": 20}
 
 
@@ -60,9 +179,14 @@ def test_no_scenes(sel: Selection, cat: Cat, kernels: Cat) -> None:
     assert errors(Draft(title="x", scenes=[]), sel, cat, kernels) == ["no scenes"]
 
 
-def test_word_budget(sel: Selection, cat: Cat, kernels: Cat) -> None:
-    d = edit(1, narration=[line(30)])
-    assert errors(d, sel, cat, kernels) == ["spoken words 60, target 50 within 10%"]
+def test_length_budget(sel: Selection, cat: Cat, kernels: Cat) -> None:
+    d = edit(1, narration=[line(10, None, act(1, "indicate")) for _ in range(3)])
+    assert errors(d, sel, cat, kernels) == [
+        "estimated length 33 s at 135 words per minute with gaps and pauses, target 28 s within "
+        "10%: cut about 11 words"
+    ]
+    (e,) = errors(edit(1, narration=[line(10)]), sel, cat, kernels)
+    assert e.endswith("target 28 s within 10%: add about 12 words")
 
 
 @pytest.mark.parametrize(
@@ -87,6 +211,7 @@ def test_word_budget(sel: Selection, cat: Cat, kernels: Cat) -> None:
         ),
         (vis("text", text="t", region="footer", until="zz"), "is no bookmark after at"),
         (vis("text", text="t", region="left"), "regions left, left overlap in time"),
+        (vis("text", text="t", region="footer", replaces=1), "replaces 1 names no earlier"),
     ],
 )
 def test_visual_errors(visual: Any, message: str, sel: Selection, cat: Cat, kernels: Cat) -> None:
@@ -95,6 +220,162 @@ def test_visual_errors(visual: Any, message: str, sel: Selection, cat: Cat, kern
     errs = errors(d, sel, cat, kernels)
     assert len(errs) == 1
     assert message in errs[0]
+
+
+def test_replaces_follows_until(sel: Selection, cat: Cat, kernels: Cat) -> None:
+    d = make_draft()
+    d.scenes[0].visuals.append(vis("equation", "b", latex="y", replaces=0, region="footer"))
+    assert errors(d, sel, cat, kernels) == []
+    d.scenes[0].visuals[3] = vis("equation", "a", latex="y", replaces=0, region="footer")
+    assert any("replaces 0 names no earlier visual" in e for e in errors(d, sel, cat, kernels))
+
+
+@pytest.mark.parametrize(
+    ("action", "message"),
+    [
+        (act(5), "scene s2: actions on visuals [5]; the scene has 2"),
+        (act(1, "fly"), "scene s2.narration[0].actions[0]: $.do: 'fly' is not one of"),
+        (act(1, color="pink"), "$.color: 'pink' is not valid under any of the given schemas"),
+        (act(1, word="nope"), "word 'nope' is no plain word of the line"),
+    ],
+)
+def test_action_errors(
+    action: DAction, message: str, sel: Selection, cat: Cat, kernels: Cat
+) -> None:
+    d = make_draft()
+    d.scenes[1].narration[0].actions.append(action)
+    assert any(message in e for e in errors(d, sel, cat, kernels))
+
+
+def test_action_outside_lifetime(sel: Selection, cat: Cat, kernels: Cat) -> None:
+    d = make_draft()
+    d.scenes[0].narration[2].actions.append(act(0))
+    assert errors(d, sel, cat, kernels) == [
+        "scene s1.narration[2].actions[1]: visual 0 is not on screen during this line"
+    ]
+
+
+def test_view_continues(sel: Selection, cat: Cat, kernels: Cat) -> None:
+    d = make_draft()
+    d.scenes[0].visuals[2] = vis("equation", latex="A = LU", region="title", view="op")
+    d.scenes[0].narration[1].actions[:] = [act(2, parts=["L"]), act(2, "indicate", parts=["U"])]
+    d.scenes[1].visuals.append(vis("equation", view="op", until="#1"))
+    d.scenes[1].narration[0].actions.append(act(2, "unmark", parts=["L"]))
+    board, errs = build(d, sel, T, cat, kernels)
+    assert errs == []
+    assert board is not None
+    old, new = board.scenes[0].visuals[2], board.scenes[1].visuals[2]
+    assert old.args["persist"] is True
+    assert new.args == {
+        "latex": "A = LU",
+        "region": "title",
+        "view": "op",
+        "enter": "none",
+        "resume": True,
+        "until": "#1",
+        "actions": [
+            {"do": "mark", "parts": ["L"]},
+            {"at": "#0", "do": "unmark", "parts": ["L"]},
+        ],
+    }
+
+
+def test_view_returns_after_a_zoom(sel: Selection, cat: Cat, kernels: Cat) -> None:
+    d = make_draft()
+    d.scenes[0].narration[2].bookmark = "c"
+    d.scenes[0].narration[0].actions.append(act(2, parts=["L"]))
+    s1 = d.scenes[0].visuals
+    s1[2] = vis("equation", latex="A = LU", region="title", view="op", until="b")
+    s1.append(vis("equation", "b", latex="L", region="title", replaces=2, until="c"))
+    s1.append(vis("equation", "c", view="op", replaces=3))
+    d.scenes[1].visuals.append(vis("equation", view="op"))
+    board, errs = build(d, sel, T, cat, kernels)
+    assert errs == []
+    assert board is not None
+    op = {"latex": "A = LU", "region": "title", "view": "op"}
+    state = [{"do": "mark", "parts": ["L"]}]
+    first, back = board.scenes[0].visuals[2].args, board.scenes[0].visuals[4].args
+    assert "persist" not in first
+    assert back == op | {"replaces": 3, "resume": True, "actions": state, "persist": True}
+    assert board.scenes[1].visuals[2].args == op | {
+        "enter": "none",
+        "resume": True,
+        "actions": state,
+    }
+
+
+def test_view_reenters_after_a_scene_without_it(sel: Selection, cat: Cat, kernels: Cat) -> None:
+    d = make_draft()
+    d.scenes[0].visuals[2] = vis("equation", latex="A", region="title", view="op")
+    d.scenes.append(
+        DScene(id="s3", goal="g", narration=[line(10)], visuals=[vis("equation", view="op")])
+    )
+    longer = T + 10 * 60 / 135 + 1.0
+    board, errs = build(d, sel, longer, cat, kernels)
+    assert errs == []
+    assert board is not None
+    assert "persist" not in board.scenes[0].visuals[2].args
+    assert board.scenes[2].visuals[0].args == {
+        "latex": "A",
+        "region": "title",
+        "view": "op",
+        "resume": True,
+        "actions": [],
+    }
+    d.scenes[2].visuals[0] = vis("equation", view="op", latex="B", region="title")
+    assert build(d, sel, longer, cat, kernels)[1] == [
+        "scene s3.visual[0]: a continued view keeps its args; drop ['latex']"
+    ]
+
+
+def test_continued_derive_keeps_its_step(sel: Selection, cat: Cat, kernels: Cat) -> None:
+    d = make_draft()
+    d.scenes[0].visuals[2] = vis("derive", steps=["a", "b", "c"], region="title", view="d")
+    d.scenes[0].narration[1].actions.append(act(2, "next"))
+    d.scenes[1].visuals.append(vis("derive", view="d"))
+    board, errs = build(d, sel, T, cat, kernels)
+    assert errs == []
+    assert board is not None
+    new = board.scenes[1].visuals[2].args
+    assert (new["resume"], new["actions"]) == (True, [{"do": "next", "parts": []}])
+
+
+@pytest.mark.parametrize(
+    ("args", "message"),
+    [({"view": ["a"]}, "view must be a string"), ({"until": 3}, "until must be a string")],
+)
+def test_malformed_view_or_until(
+    args: dict[str, Any], message: str, sel: Selection, cat: Cat, kernels: Cat
+) -> None:
+    d = make_draft()
+    d.scenes[1].visuals.append(vis("equation", latex="x", region="title", **args))
+    assert errors(d, sel, cat, kernels) == [f"scene s2.visual[2]: {message}"]
+
+
+def test_script_bounds() -> None:
+    errs: list[str] = []
+    lines = [DLine(text="a", bookmark="#1"), DLine(text="b", pause=-1.0), DLine(text="c")]
+    script(DScene(id="s", goal="g", narration=lines, visuals=[]), 60, errs)
+    assert errs == [
+        "scene s.narration[0]: bookmark '#1': # is kept for unnamed lines",
+        "scene s.narration[1]: pause -1.00 s outside [0, 30] s",
+    ]
+    errs.clear()
+    first = DLine(text="a b c d", actions=[act(parts=["x{}"])])
+    lp = DLoop(over=[str(i) for i in range(12)], lines=[first], brief=["e"], speedup=1.0)
+    script(DScene(id="s", goal="g", narration=[], loop=lp, visuals=[]), 60, errs)
+    assert len(errs) == 1
+    assert errs[0].startswith("scene s.loop.brief[0]: pause ")
+    assert errs[0].endswith(" s outside [0, 30] s")
+
+
+def test_view_needs_same_primitive(sel: Selection, cat: Cat, kernels: Cat) -> None:
+    d = make_draft()
+    d.scenes[0].visuals[2] = vis("equation", latex="A", region="title", view="op")
+    d.scenes[1].visuals.append(vis("text", region="footer", view="op"))
+    assert errors(d, sel, cat, kernels) == [
+        "scene s2.visual[2]: view 'op' continues a equation, not a text"
+    ]
 
 
 def test_until_must_follow_at(sel: Selection, cat: Cat, kernels: Cat) -> None:
@@ -112,6 +393,7 @@ def test_sequential_visuals_share_region(sel: Selection, cat: Cat, kernels: Cat)
 
 def test_scene_errors(sel: Selection, cat: Cat, kernels: Cat) -> None:
     d = edit(1, visuals=[], nodes=["mom", "ghost"])
+    d.scenes[1].narration[1].actions.clear()
     errs = errors(d, sel, cat, kernels)
     assert errs == ["scene s2: no visuals", "scene s2: nodes outside the selection ['ghost']"]
 
@@ -157,3 +439,9 @@ def test_scene_returns_none_only_for_own_errors(sel: Selection, cat: Cat, kernel
     d = make_draft()
     d.scenes.append(DScene(id="s3", goal="g", narration=[line(1)], visuals=[], nodes=[]))
     assert errors(d, sel, cat, kernels) == ["scene s3: no visuals"]
+
+
+def test_board_args_are_json(sel: Selection, cat: Cat, kernels: Cat) -> None:
+    board, _ = build(make_draft(), sel, T, cat, kernels)
+    assert board is not None
+    assert json.loads(board.model_dump_json())["scenes"][1]["narration"][1]["pause_s"] == 1.0

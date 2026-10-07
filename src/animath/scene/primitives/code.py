@@ -1,27 +1,33 @@
 import ast
 import builtins
 import inspect
-from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from collections.abc import Callable
 from types import TracebackType
 from typing import Any
 
 import manim
 import numpy as np
-from manim import Mobject
+from manim import Animation, Mobject
+from manim.animation.animation import prepare_animation
 from pydantic import Field
 
 from animath.core.errors import AnimateError
 from animath.scene.layout import Box
-from animath.scene.primitives import PRIMITIVES, Args, ArrayRef, Context, Primitive
+from animath.scene.primitives.base import Args, ArrayRef, Context, Primitive, path
 
 SNIPPET = "<snippet>"
+ACT = "animath_act"
+BUILD, ACT_SIG = ("build", ("array",)), ("act", ("m", "verb", "parts"))
 API_PARAMS = 8
 MOBJECTS = (  # noqa: SIM905
     "Annulus Arc Arrow Axes Brace BraceBetweenPoints Circle Cross DashedLine DecimalNumber Dot "
     "DoubleArrow Ellipse FunctionGraph Group Line MathTable MathTex NumberLine NumberPlane "
     "ParametricFunction Polygon Rectangle RoundedRectangle Square SurroundingRectangle Table "
     "Tex Text Triangle VGroup Vector"
+).split()
+ANIMATIONS = (  # noqa: SIM905
+    "AnimationGroup Circumscribe Create FadeIn FadeOut GrowFromCenter Indicate LaggedStart "
+    "ReplacementTransform Transform Write"
 ).split()
 CONSTANTS = (  # noqa: SIM905
     "ORIGIN UP DOWN LEFT RIGHT UL UR DL DR PI TAU DEGREES "
@@ -32,7 +38,7 @@ NP = (  # noqa: SIM905
     "log10 max mean meshgrid min ones pi real sin sqrt stack sum tan zeros"
 ).split()
 BUILTINS = "abs enumerate float int len list max min range round str sum tuple zip".split()  # noqa: SIM905
-NAMES = frozenset(MOBJECTS + CONSTANTS + BUILTINS + ["np"])
+NAMES = frozenset(MOBJECTS + ANIMATIONS + CONSTANTS + BUILTINS + ["np"])
 DENIED_ATTRS = frozenset({"dump", "dumps", "format", "format_map", "save", "save_image", "tofile"})
 DENIED_PREFIXES = ("_", "ag_", "co_", "cr_", "f_", "gi_", "tb_")
 FORBIDDEN = (
@@ -55,20 +61,20 @@ FORBIDDEN = (
 
 
 def gate(code: str) -> list[str]:
-    """Static gate: one `def build(array)`; names, attributes and statements whitelisted."""
+    """Static gate: `def build(array)`, optionally `def act(m, verb, parts)`; names, attributes
+    and statements whitelisted."""
     try:
         tree = ast.parse(code)
     except SyntaxError as e:
         return [f"line {e.lineno}: syntax error: {e.msg}"]
     out = []
-    b = tree.body
-    if not (
-        len(b) == 1
-        and isinstance(b[0], ast.FunctionDef)
-        and b[0].name == "build"
-        and [x.arg for x in b[0].args.args] == ["array"]
-    ):
-        out.append("module must consist of exactly `def build(array): ...`")
+    sig = {
+        (f.name, tuple(x.arg for x in f.args.args))
+        for f in tree.body
+        if isinstance(f, ast.FunctionDef)
+    }
+    if len(sig) != len(tree.body) or not {BUILD} <= sig <= {BUILD, ACT_SIG}:
+        out.append("module must be `def build(array)`, optionally with `def act(m, verb, parts)`")
     nodes = list(ast.walk(tree))
     bound = {n.id for n in nodes if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store)}
     bound |= {n.arg for n in nodes if isinstance(n, ast.arg)}
@@ -97,56 +103,33 @@ def _line(tb: TracebackType | None) -> int:
     return n
 
 
-def run(code: str, array: Callable[..., Any]) -> Mobject:
-    """Gate, execute in a whitelisted namespace, and call `build(array)`."""
-    bad = gate(code)
-    if bad:
-        raise ValueError("; ".join(bad))
-    ns: dict[str, Any] = {
-        "__builtins__": {n: getattr(builtins, n) for n in BUILTINS},
-        "np": np,
-        **{n: getattr(manim, n) for n in MOBJECTS + CONSTANTS},
-    }
+def call(f: Callable[..., Any], *args: Any) -> Any:
+    """`f(*args)` with errors located by snippet line."""
     try:
-        exec(compile(code, SNIPPET, "exec"), ns)
-        m = ns["build"](array)
+        return f(*args)
     except AnimateError:
         raise
     except Exception as e:
-        raise RuntimeError(f"line {_line(e.__traceback__)}: {type(e).__name__}: {e}") from e
+        raise AnimateError(f"line {_line(e.__traceback__)}: {type(e).__name__}: {e}") from e
+
+
+def run(code: str, array: Callable[..., Any]) -> Mobject:
+    """Gate, execute in a whitelisted namespace, and call `build(array)`; a defined `act` is
+    kept on the result."""
+    bad = gate(code)
+    if bad:
+        raise AnimateError("; ".join(bad))
+    ns: dict[str, Any] = {
+        "__builtins__": {n: getattr(builtins, n) for n in BUILTINS},
+        "np": np,
+        **{n: getattr(manim, n) for n in MOBJECTS + ANIMATIONS + CONSTANTS},
+    }
+    call(exec, compile(code, SNIPPET, "exec"), ns)
+    m = call(ns["build"], array)
     if not isinstance(m, Mobject):
-        raise TypeError(f"build returned {type(m).__name__}, not a Mobject")
+        raise AnimateError(f"build returned {type(m).__name__}, not a Mobject")
+    setattr(m, ACT, ns.get("act"))
     return m
-
-
-class CodeArgs(Args):
-    code: str = Field(min_length=1)
-
-
-class Code(Primitive[CodeArgs]):
-    """Generated `def build(array) -> Mobject`; `array(data, name, part=None)` reads a DataSet."""
-
-    name = "code"
-    args = CodeArgs
-
-    def build(self, a: CodeArgs, ctx: Context, cell: Box) -> Mobject:
-        def array(data: int, name: str, part: str | None = None) -> Any:
-            return ctx.real(ArrayRef.model_validate({"data": data, "array": name, "part": part}))
-
-        return run(a.code, array)
-
-
-CODE = Code()
-
-
-@contextmanager
-def registered() -> Iterator[None]:
-    """Expose `code` to the renderer; process-local, like the renderer itself."""
-    PRIMITIVES[CODE.name] = CODE
-    try:
-        yield
-    finally:
-        del PRIMITIVES[CODE.name]
 
 
 def api() -> str:
@@ -162,10 +145,50 @@ def api() -> str:
         return ", ".join(names[:API_PARAMS])
 
     return "\n".join(
-        [f"{n}({sig(n)})" for n in MOBJECTS]
+        [f"{n}({sig(n)})" for n in MOBJECTS + ANIMATIONS]
         + [
             f"constants: {' '.join(CONSTANTS)}",
             f"np: {' '.join(NP)}",
             f"builtins: {' '.join(BUILTINS)}",
         ]
     )
+
+
+class CodeArgs(Args):
+    code: str = Field(
+        min_length=1,
+        description="Python source of `def build(array)` returning one Mobject, and optionally "
+        "`def act(m, verb, parts)` returning an Animation for actions with other than the "
+        "generic verbs; `parts` are the selected submobjects of `m`. act changes m in place: "
+        "`p.animate...`, Transform(p, q) (p takes the shape of q), Indicate, or Create, Write, "
+        "FadeIn, GrowFromCenter of new objects, which join the visual. Parts are dotted index "
+        "paths, e.g. `1.0`. No imports, while, try, with, raise, or names beginning with `_`. "
+        "`array(data, name, part=None)` returns the real NumPy array `name` of data request "
+        "`data`; complex arrays need `part` in abs, real, imag. API:\n" + api(),
+    )
+
+
+class Code(Primitive[CodeArgs]):
+    """Generated visual: whitelisted Python building a Mobject, with its own verbs if it defines
+    `act`. Use only where no other primitive shows the visual."""
+
+    name = "code"
+    args = CodeArgs
+
+    def build(self, a: CodeArgs, ctx: Context, cell: Box) -> Mobject:
+        def array(data: int, name: str, part: str | None = None) -> Any:
+            return ctx.real(ArrayRef.model_validate({"data": data, "array": name, "part": part}))
+
+        return run(a.code, array)
+
+    def knows(self, m: Mobject, verb: str) -> bool:
+        return getattr(m, ACT, None) is not None
+
+    def act(self, m: Mobject, a: CodeArgs, verb: str, parts: list[str]) -> Animation:
+        out = call(getattr(m, ACT), m, verb, [path(m, s) for s in parts])
+        try:
+            return prepare_animation(out)
+        except TypeError as e:
+            raise AnimateError(
+                f"act({verb!r}) returned {type(out).__name__}, not an Animation"
+            ) from e
