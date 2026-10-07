@@ -146,6 +146,10 @@ def test_narration_timeline() -> None:
         Narration(scene_id="s", audio=H, duration_s=1.0, words=words[::-1])
     with pytest.raises(ValidationError, match="exceed"):
         Narration(scene_id="s", audio=H, duration_s=0.9, words=words)
+    with pytest.raises(ValidationError, match="caption starts not monotone"):
+        Narration(scene_id="s", audio=H, duration_s=1.0, captions=words[::-1])
+    with pytest.raises(ValidationError, match="captions exceed"):
+        Narration(scene_id="s", audio=H, duration_s=0.9, words=words[:1], captions=words)
     with pytest.raises(ValidationError, match="outside"):
         Narration(scene_id="s", audio=H, duration_s=1.0, bookmarks={"m": 1.5})
     with pytest.raises(ValidationError, match="outside"):

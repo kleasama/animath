@@ -61,14 +61,14 @@ All artifacts are frozen Pydantic models (`core.schemas`), serialized as canonic
 | `KnowledgeGraph` $\mathcal{K}$ | $\Phi_2$ | $\Phi_3$ | nodes (id, kind, name, latex, meaning, key, sources → block ids), edges (src, dst, rel) |
 | `Storyboard` $\mathcal{B}$ | $\Phi_3$ | $\Phi_4,\Phi_5,\Phi_6$ | title, scenes[] (id, goal, narration[] (text, bookmark), visuals[] (primitive, args, at), math[], data[], nodes[], duration), symbols |
 | `DataSet` | $\Phi_4$ | $\Phi_5$ | request (kind, params), arrays (name → blob), meta |
-| `Narration` | $\Phi_6$ | $\Phi_5,\Phi_7$ | scene id, audio blob, duration, words (text, start, end), bookmark times |
+| `Narration` | $\Phi_6$ | $\Phi_5,\Phi_7$ | scene id, audio blob, duration, words (text, start, end), captions (written tokens, start, end), bookmark times |
 | `SceneRender` | $\Phi_5$ | $\Phi_7$ | scene id, clip blob, duration, bookmark times, checks |
 | `Manifest` | $\Phi_7$ | user | video, subtitles, artifact digests, versions, timings, usage, metrics |
 
 **Invariants 4.1.**
 1. Every artifact carries `schema_version`.
 2. A stage computes its input key $k = H(\text{stage}, \text{version}, d_1,\dots,d_m)$ over its input digests and is skipped iff `Store.lookup(kind, k)` succeeds.
-3. Validators enforce: unique ids and labels, resolved references, acyclic `depends_on`, visuals cue existing bookmarks, monotone word timings within duration.
+3. Validators enforce: unique ids and labels, resolved references, acyclic `depends_on`, visuals cue existing bookmarks, monotone word and caption timings within duration.
 
 ## 5 Quality metrics
 
