@@ -5,7 +5,7 @@ from typing import Any, Protocol
 
 import anthropic
 from anthropic.types.beta import BetaImageBlockParam, BetaTextBlockParam
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from animath.core.config import Effort, Settings
 from animath.core.errors import LLMError
@@ -23,7 +23,8 @@ class LLM(Protocol):
 
 
 class Claude:
-    """Structured-output client: cached system prompt, PNG vision input, refusal fallback."""
+    """Streamed structured-output client: cached system prompt, PNG vision input, refusal
+    fallback. Streaming lifts the SDK's 10-minute bound on non-streaming `max_tokens`."""
 
     def __init__(
         self, model: str, effort: Effort, max_tokens: int, client: Any | None = None
@@ -47,7 +48,7 @@ class Claude:
         ]
         content.append({"type": "text", "text": prompt})
         try:
-            r = self.client.beta.messages.parse(
+            with self.client.beta.messages.stream(
                 model=self.model,
                 max_tokens=self.max_tokens,
                 system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
@@ -56,9 +57,12 @@ class Claude:
                 output_config={"effort": self.effort},
                 betas=[FALLBACK_BETA],
                 fallbacks="default",
-            )
+            ) as stream:
+                r = stream.get_final_message()
         except anthropic.APIError as e:
             raise LLMError(f"{type(e).__name__}: {e}") from e
+        except ValidationError as e:
+            raise LLMError(f"unparsable {schema.__name__} output: {e.errors()[0]['msg']}") from e
         if r.stop_reason != "end_turn" or r.parsed_output is None:
             raise LLMError(f"no parsed output (stop_reason={r.stop_reason})")
         u = r.usage

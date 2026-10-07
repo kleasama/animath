@@ -1,4 +1,7 @@
 import base64
+import json
+from collections.abc import Iterator
+from contextlib import contextmanager
 from types import SimpleNamespace
 from typing import Any
 
@@ -23,11 +26,12 @@ class FakeMessages:
         self.reply, self.error = reply, error
         self.calls: list[dict[str, Any]] = []
 
-    def parse(self, **kw: Any) -> Any:
+    @contextmanager
+    def stream(self, **kw: Any) -> Iterator[Any]:
         self.calls.append(kw)
         if self.error:
             raise self.error
-        return self.reply
+        yield SimpleNamespace(get_final_message=lambda: self.reply)
 
 
 def fake_client(messages: FakeMessages) -> Any:
@@ -73,6 +77,61 @@ def test_claude_wraps_api_errors() -> None:
     err = anthropic.APIConnectionError(request=httpx2.Request("POST", "https://x"))
     with pytest.raises(LLMError, match="APIConnectionError"):
         Claude("m", "low", 1024, fake_client(FakeMessages(error=err))).parse(Answer, "s", "p")
+
+
+def sse_reply(text: str, stop: str) -> bytes:
+    usage = {"input_tokens": 10, "output_tokens": 1, "cache_read_input_tokens": 3}
+    msg: dict[str, Any] = {"id": "m", "type": "message", "role": "assistant", "content": []}
+    msg |= {"model": "m", "stop_reason": None, "stop_sequence": None}
+    msg["usage"] = usage | {"cache_creation_input_tokens": 6}
+    events: list[dict[str, Any]] = [
+        {"type": "message_start", "message": msg},
+        {"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}},
+        {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": text}},
+        {"type": "content_block_stop", "index": 0},
+        {"type": "message_delta", "delta": {"stop_reason": stop}, "usage": {"output_tokens": 4}},
+        {"type": "message_stop"},
+    ]
+    return b"".join(f"event: {e['type']}\ndata: {json.dumps(e)}\n\n".encode() for e in events)
+
+
+def sdk_client(body: bytes, seen: list[httpx2.Request]) -> anthropic.Anthropic:
+    def handle(req: httpx2.Request) -> httpx2.Response:
+        seen.append(req)
+        return httpx2.Response(200, content=body, headers={"content-type": "text/event-stream"})
+
+    transport = httpx2.MockTransport(handle)
+    return anthropic.Anthropic(
+        api_key="k", http_client=anthropic.DefaultHttpxClient(transport=transport)
+    )
+
+
+def test_claude_streams_default_max_tokens_through_sdk() -> None:
+    seen: list[httpx2.Request] = []
+    s = Settings()
+    llm = Claude(
+        s.model, s.effort, s.max_tokens, sdk_client(sse_reply('{"value": 7}', "end_turn"), seen)
+    )
+    out, usage = llm.parse(Answer, "sys", "q")
+    assert (out, usage) == (
+        SEVEN,
+        Usage(input_tokens=10, output_tokens=4, cache_read_tokens=3, cache_write_tokens=6),
+    )
+    body = json.loads(seen[0].content)
+    assert (body["stream"], body["max_tokens"], body["fallbacks"]) == (
+        True,
+        s.max_tokens,
+        "default",
+    )
+    assert body["output_config"]["effort"] == s.effort
+    assert body["output_config"]["format"]["schema"]["required"] == ["value"]
+    assert seen[0].headers["anthropic-beta"] == FALLBACK_BETA
+
+
+def test_claude_truncated_output_is_llm_error() -> None:
+    llm = Claude("m", "low", 1024, sdk_client(sse_reply('{"val', "max_tokens"), []))
+    with pytest.raises(LLMError, match="unparsable Answer output"):
+        llm.parse(Answer, "s", "p")
 
 
 def test_replay_caches_by_full_request(store: Store) -> None:
