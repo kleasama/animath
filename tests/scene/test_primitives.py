@@ -1,4 +1,5 @@
 import math
+from itertools import combinations
 from typing import Any, cast
 
 import numpy as np
@@ -99,6 +100,23 @@ def test_matrix_entries(store: Store) -> None:
     for bad in cases:
         with pytest.raises(ValidationError, match="rectangular"):
             PRIMITIVES["matrix"].args.model_validate({"entries": bad})
+
+
+def test_matrix_entries_disjoint(store: Store) -> None:
+    jacobi = [
+        ["0", r"\frac{1}{\sqrt{3}}", "0"],
+        [r"\frac{1}{\sqrt{3}}", "0", r"\frac{2}{\sqrt{15}}"],
+        ["0", r"\frac{2}{\sqrt{15}}", "0"],
+    ]
+    boxes = [
+        (e.get_left()[0], e.get_bottom()[1], e.get_right()[0], e.get_top()[1])
+        for e in build("matrix", context(store), entries=jacobi).get_entries()
+    ]
+    assert not [
+        (a, b)
+        for a, b in combinations(boxes, 2)
+        if a[0] < b[2] and b[0] < a[2] and a[1] < b[3] and b[1] < a[3]
+    ]
 
 
 def test_matrix_heatmap(store: Store) -> None:

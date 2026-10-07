@@ -21,21 +21,27 @@ S = scene(EQ, TXT)
 
 def test_keyframes() -> None:
     times = {"a": 0.0, "b": 2.0}
-    assert keyframes(S, times, 4.0, 10) == [(14, [0]), (34, [1])]
+    assert keyframes(S, times, 4.0, 10) == [(14, [0]), (39, [1])]
     late = scene(Visual(primitive="text", args={"text": "T"}, at="b"))
-    assert keyframes(late, times, 4.0, 10) == [(34, [0])]
+    assert keyframes(late, times, 4.0, 10) == [(39, [0])]
     marks = tuple("abcde")
     many = scene(
         *(Visual(primitive="text", args={"text": m, "until": m}) for m in marks[1:]), marks=marks
     )
     t = {m: float(i) for i, m in enumerate(marks)}
-    assert keyframes(many, t, 5.0, 10) == [
-        (4, [0, 1, 2, 3]),
-        (14, [1, 2, 3]),
-        (24, [2, 3]),
-        (34, [3]),
+    assert keyframes(many, t, 5.0, 10) == [(14, [1, 2, 3]), (24, [2, 3]), (34, [3])]
+    assert keyframes(many, t, 5.0, 10, k=2) == [(14, [1, 2, 3]), (34, [3])]
+
+
+def test_keyframes_skip_derivation_steps() -> None:
+    d = Visual(primitive="derive", args={"steps": ["a", "b", "c"]})
+    f = Visual(primitive="text", args={"text": "F", "region": "footer"}, at="f")
+    s = scene(d, f, marks=("a", "f"), duration=30.0)
+    assert keyframes(s, {"a": 0.0, "f": 10.7}, 30.0, 10) == [
+        (99, [0]),
+        (199, [0, 1]),
+        (299, [0, 1]),
     ]
-    assert keyframes(many, t, 5.0, 10, k=2) == [(4, [0, 1, 2, 3]), (34, [3])]
 
 
 def test_blank_and_png() -> None:
@@ -89,7 +95,7 @@ def test_critique_blank_skips_vlm(tmp_path: Path) -> None:
         d = render(s, Params(), store, draft=True)
     llm = Fake()
     assert critique(s, d, store, llm) == (
-        ["s.0:code: nothing visible in region main at t=3.40 s"],
+        ["s.0:code: nothing visible in region main at t=3.93 s"],
         Usage(),
     )
     assert llm.calls == []

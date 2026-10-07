@@ -2,6 +2,7 @@
 
 import re
 from collections.abc import Iterable
+from functools import cache
 
 import sympy  # type: ignore[import-untyped]
 from lark import Tree
@@ -13,21 +14,28 @@ from animath.core.schemas import BlockType, DocIR, Storyboard
 
 TOKEN = re.compile(r"\\[a-zA-Z]+|\\.|\S")
 DROP = re.compile(
-    r"\\(?:[,;:!> ]|q?quad|displaystyle|textstyle|left|right|[bB]igg?[lr]?)(?![a-zA-Z])|~"
+    r"\\(?:[,;:!> ]|q?quad|displaystyle|textstyle|left|right|[bB]igg?[lr]?)(?![a-zA-Z])|~|(?<!\\)&"
 )
 FONT = re.compile(r"\\(?:mathbf|mathrm|mathit|boldsymbol|bm|mathsf|mathcal)\s*")
-MARK = re.compile(r"\{\{|\}\}")
+MARK = re.compile(r"\{\{(.*?)\}\}")
+INLINE = re.compile(r"(?<!\\)\$([^$]+)\$")
+DEPTH = {
+    **dict.fromkeys(("{", "(", "[", r"\{", r"\langle"), 1),
+    **dict.fromkeys(("}", ")", "]", r"\}", r"\rangle"), -1),
+}
+SEP = {",", ";", r"\\"}
 
 
 def normalize(tex: str) -> str:
-    """Token sequence modulo spacing, sizing, single-token script braces, trailing punctuation."""
+    """Token sequence modulo spacing, sizing, alignment, braces around one token, trailing
+    punctuation."""
     t = TOKEN.findall(DROP.sub(" ", tex))
     out: list[str] = []
     i = 0
     while i < len(t):
-        if t[i] in "^_" and t[i + 1 : i + 2] == ["{"] and t[i + 3 : i + 4] == ["}"]:
-            out += [t[i], t[i + 2]]
-            i += 4
+        if t[i] == "{" and t[i + 2 : i + 3] == ["}"] and t[i + 1] not in ("{", "}"):
+            out.append(t[i + 1])
+            i += 3
         else:
             out.append(t[i])
             i += 1
@@ -36,6 +44,7 @@ def normalize(tex: str) -> str:
     return " ".join(out)
 
 
+@cache
 def parse(tex: str) -> list[sympy.Basic]:
     """SymPy readings of `tex` (several if ambiguous); [] if unparseable."""
     try:
@@ -100,14 +109,33 @@ def on_screen(board: Storyboard) -> list[list[str]]:
             if v.primitive == "equation" and isinstance(tex := v.args.get("latex"), str):
                 out.append([tex])
             elif v.primitive == "derive" and isinstance(steps := v.args.get("steps"), list):
-                out.append([MARK.sub("", str(x)) for x in steps])
+                out.append([MARK.sub(r"\1", str(x)) for x in steps])
     return out
+
+
+def parts(tex: str) -> list[str]:
+    """`tex` and, if it is a list, its parts split at top-level `,`, `;` and `\\`."""
+    out: list[list[str]] = [[]]
+    depth = 0
+    for x in TOKEN.findall(DROP.sub(" ", tex)):
+        depth += DEPTH.get(x, 0)
+        if depth == 0 and x in SEP:
+            out.append([])
+        else:
+            out[-1].append(x)
+    return [tex, *(" ".join(p) for p in out if p)] if len(out) > 1 else [tex]
+
+
+def references(doc: DocIR) -> list[str]:
+    """Equations of D, inline math of its text, and their top-level parts."""
+    tex = [t for _, t in equations(doc)] + [m for b in doc.blocks for m in INLINE.findall(b.text)]
+    return [p for t in tex for p in parts(t)]
 
 
 def untraced(board: Storyboard, doc: DocIR) -> tuple[int, list[str]]:
     """N1: formulas on screen neither in D (normalized or SymPy-equivalent) nor derived from
     their predecessor by SymPy equivalence. Returns (number shown, untraced)."""
-    refs = [tex for _, tex in equations(doc)]
+    refs = references(doc)
     shown, bad = 0, []
     for chain in on_screen(board):
         for i, f in enumerate(chain):

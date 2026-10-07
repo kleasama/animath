@@ -3,7 +3,7 @@ import json
 import pytest
 
 from animath.core.errors import AnimateError
-from animath.core.schemas import Visual
+from animath.core.schemas import Usage, Visual
 from animath.core.store import Store
 from animath.scene.repair import (
     PITFALLS,
@@ -78,6 +78,15 @@ def test_repair_localizes(store: Store) -> None:
     assert (name, images, task["repair"], task["pitfalls"]) == ("Patch", (), [1], ["s.1:text: old"])
     assert task["errors"] == ["s.1:text: build failed: bad"]
     assert [v["index"] for v in task["visuals"]] == [0, 1]
+
+
+def test_repair_memo_ignores_pitfalls(store: Store) -> None:
+    llm = Fake(Patch(fixes=[fix(1)]))
+    first = repair(S, ["s.1:text: bad"], llm, store)
+    record(store, S, ["s.1:text: later"])
+    assert repair(S, ["s.1:text: bad"], llm, store) == (first[0], [], Usage())
+    assert len(llm.calls) == 1
+    repair(S, ["s.1:text: other"], Fake(Patch(fixes=[fix(1)])), store)
 
 
 def test_repair_whole_scene(store: Store) -> None:

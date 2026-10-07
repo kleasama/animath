@@ -270,11 +270,11 @@ Algorithm 9.1 Scene generation: SPEC Algorithm 6.1.
 | `text` | `text` (LaTeX text mode) | `Tex` | write |
 | `equation` | `latex` | `MathTex` | write |
 | `derive` | `steps` ($\ge 2$; `{{...}}` marks matched parts) | `MathTex` chain | write, then `TransformMatchingTex` at $t_0 + k(t_1-t_0)/n$ |
-| `matrix` | `entries` (strings or `ArrayRef`) | entries if $\max(m,n) \le 8$, else heatmap of $\log_{10}\lvert a_{ij}\rvert$ | write or fade in |
+| `matrix` | `entries` (strings or `ArrayRef`) | entries if $\max(m,n) \le 8$, centred on a grid whose pitch clears the largest entry by 0.4; else heatmap of $\log_{10}\lvert a_{ij}\rvert$ | write or fade in |
 | `plot` | `series` ($\le 5$; `x`, `y`, `label`), `xlabel`, `ylabel`, `logy` | `Axes`, line graphs, legend | write |
 | `field` | `values` $u_{ij}$ at $(x_j, y_i)$, $y$ upward | viridis heatmap | fade in |
 | `surface` | `points` $(n,3)$, `faces` $(m,3)$, `scalars` $(n)$ or $(m)$, `azimuth`, `elevation` | PyVista offscreen image | fade in |
-| `trace` | `lines`, `steps` (line indices) | monospace listing, cursor | write, then cursor to line `steps[i]` at $t_0 + i(t_1-t_0)/n$ |
+| `trace` | `lines` (plain text, not TeX), `steps` (line indices) | monospace listing, cursor | write, then cursor to line `steps[i]` at $t_0 + i(t_1-t_0)/n$ |
 
 9.3 Semantic grid. For frame $F = [-W/2, W/2] \times [-H/2, H/2]$, $H = 8$, $W = 8w/h$, a region with normalized box $(u_0, v_0, u_1, v_1)$ occupies
 $$C = [-W/2 + u_0 W,\; -W/2 + u_1 W] \times [-H/2 + v_0 H,\; -H/2 + v_1 H]. \tag{9.1}$$
@@ -336,11 +336,11 @@ Hence at most $N_{\text{retry}}$ repairs follow the first check; codegen is the 
 
 9.10 `code` primitive. Arguments `code`, `region`, `until`. The snippet is exactly `def build(array)` returning one `Mobject`; `array(i, name, part=None)` is `Context.real` on `ArrayRef(i, name, part)`. It enters by `Write`/`FadeIn` and is fitted by (9.2) like any primitive. The gate admits names from a whitelist (32 mobject classes, direction and colour constants, 14 builtins), `np.f` for 29 NumPy functions only, and rejects imports, `while`, `try`, `with`, `raise`, `global`, class definitions, and attributes with prefixes `_`, `f_`, `gi_`, `co_`, `cr_`, `ag_`, `tb_` or names `format`, `save`, `tofile`, `dump`. Execution uses a namespace of exactly these symbols. Runtime errors report the snippet line. The gate filters model errors; it is not a security boundary.
 
-9.11 Localization. Every error names visual $i$ of scene $s$ as `s.i:primitive` (render, gate and critic alike). `repair` may replace only the visuals named in $E$ (block level; snippet line numbers give line level), else all visuals (scene level). The model returns `Patch` = [(index, primitive, args as JSON string, at)]; a patch outside the allowed indices, with non-object `args`, or yielding an invalid `Scene` is rejected. The prompt carries goal, narration, math, data requests, indexed visuals, $E$, allowed indices and pitfalls; the system prompt carries the catalog (with `code`), region sizes and the pinned API (constructor parameters, at most 8 per class), so it is cached.
+9.11 Localization. Every error names visual $i$ of scene $s$ as `s.i:primitive` (render, gate and critic alike). `repair` may replace only the visuals named in $E$ (block level; snippet line numbers give line level), else all visuals (scene level). The model returns `Patch` = [(index, primitive, args as JSON string, at)]; a patch outside the allowed indices, with non-object `args`, or yielding an invalid `Scene` is rejected. The prompt carries goal, narration, math, data requests, indexed visuals, $E$, allowed indices and pitfalls; the system prompt carries the catalog (with `code`), region sizes and the pinned API (constructor parameters, at most 8 per class), so it is cached. Patches are memoized in namespace `repair` under $H(\text{system}, s, E)$: pitfalls are advisory and change between runs, so they stay out of the key and a resumed run replays its repairs.
 
-9.12 Critic. Keyframes: for consecutive change frames $a < b$ of the visual set, frame
-$$n = \max\big(a,\; b - 1 - \operatorname{round}(0.5 f)\big), \tag{9.6}$$
-i.e. after entries and before exits, kept if a visual is alive; at most 6, evenly subsampled. A visual alive at $n$ with $n \ge \operatorname{round}((t_0 + 1)f)$ fails if its grid cell has no pixel above 16 (of 255). Only if no visual fails, the model receives the keyframes as PNG with the plan and returns `Verdict` (issues with optional visual index).
+9.12 Critic. Moving frames are those within 1 s after an entry or a `derive` step ($t_0 + k(t_1-t_0)/n$, $k \ge 1$) and within 0.5 s before an exit. Keyframes: for consecutive change frames $a < b$ of the visual set or of a `derive` step,
+$$n = \max\{\, m \in [a, b) : m \text{ not moving} \,\}, \tag{9.6}$$
+kept if it exists and a visual is alive; at most 6, evenly subsampled. A transient state with no still frame is skipped. A visual alive at $n$ fails if its grid cell has no pixel above 16 (of 255). Only if no visual fails, the model receives the keyframes as PNG with the plan and returns `Verdict` (issues with optional visual index).
 
 9.13 Pitfall memory. Index namespace `pitfall`, key $H(\text{primitive})$ (`scene` for unlocalized errors), value a blob with the last 8 distinct messages (300 characters each). Read-modify-write is last-writer-wins across processes; a lost entry only weakens a hint.
 
@@ -455,7 +455,7 @@ $f$ the animate function's qualified name, $\pi_5$ = (`width`, `height`, `fps`, 
 
 `metrics.failures` lists metrics missing their target (`TARGETS`).
 
-**Algorithm 12.3 (equivalence, N1, I2).** Normalization: drop spacing and sizing commands (`\,`, `\quad`, `\left`, `\big`, …), tokenize into control words, control symbols and characters, unwrap single-token script braces, strip trailing `.,;`; compare token sequences. Equivalence: parse by SymPy `parse_latex` (Lark backend, font commands removed); an ambiguous parse yields all readings; equalities $a = b$, $c = d$ agree iff $(a-b) \mp (c-d)$ simplifies to 0, expressions iff $a - b$ does. Verdict: True if some pair agrees, False if none, None if either side does not parse. Formulas shown are `math`, `equation` latex and `derive` steps (match markers removed). A formula is traced iff it matches an equation of $\mathcal D$ (normalized or equivalent), or, as a derive step, is equivalent to its predecessor.
+**Algorithm 12.3 (equivalence, N1, I2).** Normalization: drop spacing and sizing commands (`\,`, `\quad`, `\left`, `\big`, …) and `&`, tokenize into control words, control symbols and characters, unwrap braces around a single token, strip trailing `.,;`; compare token sequences. Equivalence: parse by SymPy `parse_latex` (Lark backend, font commands removed); an ambiguous parse yields all readings; equalities $a = b$, $c = d$ agree iff $(a-b) \mp (c-d)$ simplifies to 0, expressions iff $a - b$ does. Verdict: True if some pair agrees, False if none, None if either side does not parse. Formulas shown are `math`, `equation` latex and `derive` steps (match markers `{{…}}` removed pairwise). References are the equations and the inline math of $\mathcal D$, each with its parts split at `,`, `;`, `\\` outside brackets. A formula is traced iff it matches a reference (normalized or equivalent), or, as a derive step, is equivalent to its predecessor.
 
 12.6 Golden run (C5). Requires `ANIMATH_API_KEY` (§2.3) as an environment variable. For each case: `animath run <source> -p approval_gates=false`, then `animath eval <manifest> --expected tests/golden/<case>/expected.json --judge`.
 

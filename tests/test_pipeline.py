@@ -234,8 +234,9 @@ def test_pages_and_bundle(tmp_path: Path) -> None:
         pipeline.bundle(GOLDEN / "efie/efie.md", P, store, "1")
     with pytest.raises(PipelineError, match="unsupported"):
         pipeline.bundle(tmp_path / "x.docx", P, store)
-    with pytest.raises(PipelineError, match="cannot read"):
-        pipeline.bundle(tmp_path / "missing.pdf", P, store)
+    for missing in ("missing.pdf", "missing.tex"):
+        with pytest.raises(PipelineError, match="cannot read"):
+            pipeline.bundle(tmp_path / missing, P, store)
 
 
 def test_budget_and_cost(tmp_path: Path) -> None:

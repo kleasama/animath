@@ -53,7 +53,9 @@ def test_coverage_duration(graph: KnowledgeGraph, board: Storyboard) -> None:
     m = Manifest(video=H, subtitles=H, artifacts={}, metrics={"duration_s": 99.0})
     assert metrics.q6(m, Params(duration_s=90)) == pytest.approx(0.1)
     doc = DocIR.model_validate_json((GOLDEN / "efie/expected.json").read_text())
-    assert metrics.n1(board, doc) == 0.0
+    assert metrics.n1(board, doc) == 1.0
+    wrong = board.scenes[0].model_copy(update={"math": ("ZI=W",)})
+    assert metrics.n1(board.model_copy(update={"scenes": (wrong,)}), doc) == 0.5
     assert metrics.n1(board.model_copy(update={"scenes": board.scenes[1:]}), doc) == 1.0
 
 
