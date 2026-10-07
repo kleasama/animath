@@ -2,8 +2,8 @@ import numpy as np
 import pytest
 
 from animath.core.errors import NarrateError
-from animath.core.schemas import Narration
-from animath.narrate.align import bounds, fade, timeline
+from animath.core.schemas import Narration, Word
+from animath.narrate.align import bounds, captions, fade, timeline
 from tests.narrate.conftest import tone
 
 RATE = 1000
@@ -58,3 +58,19 @@ def test_timeline_layout_words_and_marks() -> None:
         bookmarks=marks,
     )
     assert n.duration_s - n.words[-1].end == pytest.approx(0.6)
+
+
+def test_captions_time_written_tokens_by_their_spoken_words() -> None:
+    said = [
+        ("Take", 0.0, 0.2),
+        ("um", 0.2, 0.3),
+        ("L", 0.3, 0.4),
+        ("2", 0.4, 0.5),
+        ("1.", 0.5, 0.7),
+    ]
+    words = [Word(text=t, start=a, end=b) for t, a, b in said]
+    tokens = [("Take", "Take"), ("", "um"), ("L₂₁.", "L 2 1."), ("∅", "")]
+    assert captions(tokens, words) == [
+        Word(text="Take", start=0.0, end=0.2),
+        Word(text="L₂₁.", start=0.3, end=0.7),
+    ]

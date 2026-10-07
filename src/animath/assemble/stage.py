@@ -75,7 +75,9 @@ def assemble(
     total = float(sum(frames) / fps)
 
     subs = vtt.webvtt(
-        c for i, t in zip(ids, starts, strict=True) for c in vtt.cues(ns[i][1].words, t)
+        c
+        for i, t in zip(ids, starts, strict=True)
+        for c in vtt.cues(ns[i][1].captions or ns[i][1].words, t)
     )
     measured = ffmpeg.loudness(audios, samples)
     with tempfile.TemporaryDirectory(prefix="animath-assemble-") as tmp:

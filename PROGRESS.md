@@ -50,12 +50,13 @@ Legend: ✓ done · ✱ in progress · ○ open · ⏸ checkpoint (review, commi
 | 1.7 | Dockerfile not built: no container runtime in the session. |
 | 2.6–2.7 | 8 primitives (`text`, `equation`, `derive`, `matrix`, `plot`, `field`, `surface`, `trace`); grid layout check; frame-exact scheduler; deterministic clips. 100% coverage of `scene/`. Handbook §9. |
 | C1 | Code moved to GitHub `kleasama/animath` (user decision). Tag push is refused by the session's git proxy; checkpoints are recorded by commit hash. |
-| 2.8 | Kokoro v1.0 weights from the GitHub release (Hugging Face blocked in containers), SHA-256 pinned in the Dockerfile. |
+| 2.8 | Kokoro v1.0 weights from the GitHub release (Hugging Face blocked in containers), SHA-256 pinned in the Dockerfile. Model token durations replace forced alignment (HANDBOOK 10.8). |
 | 2.4 | SymPy equivalence check deferred to WP9; pandoc 3.9 bundled via `pypandoc-binary` (subprocess). |
 | C2 | PRs #1–#5 merged. 220 tests, 100% line+branch coverage, mypy strict, licences clean. For WP7/WP8: complex data refs need `part` ∈ {abs, real, imag}; the planner receives the primitive catalog as an argument (Rule 6.2). |
 | C3 | PRs #7, #8 merged. 286 tests, 100% line+branch coverage. For WP9: pass `scene.catalog()` and the numerics kernel schemas into `plan.run`; planner depends on `jsonschema`. |
 | 5.3 | Session mode (`llm = session`, PR #12); streamed API calls (PR #11). Golden set at 1080p60, espeak-ng: Q1–Q5 pass on EFIE, Gauss, GMRES; Q6 Gauss 0.153 > 0.1; Q7 4.0–4.5; N1 0.12–0.55. |
 | C5 | v0.1 = main after PRs #11–#14. 377 tests, 100% line+branch coverage. |
+| v0.2 | PRs #15–#17: Kokoro sentence narration with model word timings, gain and limiter loudness; `h2.rss` RS-S kernel, `hierarchy` primitive, `data.npz` arrays pinned by SHA-256; written-maths captions. 517 tests, 100% line+branch coverage. Pending: #18 pacing, narration of `Line.pause_s` and `Params.wpm`. |
 | C4 | PRs #9, #10 merged. `scene.animate` returns `(SceneRender, Usage)` and is the pipeline default; `pipeline.render_only` is the no-LLM path. 362 tests, 100% line+branch coverage. |
 
 ## Open questions

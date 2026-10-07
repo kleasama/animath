@@ -62,3 +62,15 @@ def timeline(
         off += b - a + gap.size
     pieces[-1] = np.zeros(round(TAIL_S * rate), np.int16)
     return np.concatenate(pieces), words, marks
+
+
+def captions(tokens: Sequence[tuple[str, str]], words: Sequence[Word]) -> list[Word]:
+    """Written tokens timed by their spoken words, which `words` lists in order."""
+    out: list[Word] = []
+    at = 0
+    for text, said in tokens:
+        ws = words[at : at + len(said.split())]
+        at += len(ws)
+        if ws and text:
+            out.append(Word(text=text, start=ws[0].start, end=ws[-1].end))
+    return out

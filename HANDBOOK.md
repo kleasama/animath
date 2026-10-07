@@ -259,6 +259,8 @@ Each array is one blob in `.npy` format (`allow_pickle=False`); `meta.version` $
 | `bem.dlp_ellipse` | `a`, `b`, `n_max` | `n`, `error`, `t`, `density` | `target` |
 | `krylov.gmres` | `operator`, `tol`, `maxiter` $\le 256$, `ritz` | `x`, `residual`, `eigs`, `ritz`, `ritz_k` | `iterations`, `converged`, `true_residual` |
 | `krylov.cg` | `operator`, `tol`, `maxiter` | `x`, `residual`, `error_a`, `bound` | `kappa`, `iterations`, `converged` |
+| `h2.rss` | `geometry` ∈ {plate, sphere}, `n`, `leaf`, `eta`, `kappa`, `tol`, `precision` ∈ {single, double}, `seed` | `points`, `perm`, `box`, `range`, `near`, `far`, `dof` (CSR, with `_ptr`), `stage`, `stage_norm`, `dag`, `schur`, `schur_norm`, `fill`, `fill_norm`, `active`, `top` | `depth`, `top_level`, `top_size`, `colours`, `stages`, `error` |
+| `data.npz` | `path` (absolute, `.npz`), `sha256` | the archive's numeric members | its 0-d `meta` member, a JSON object |
 
 Operators (discriminator `name`): `poisson1d` $\operatorname{tridiag}(-1,2,-1)$; `convdiff` $\operatorname{tridiag}(-1-P,2,-1+P)$, $P$ the cell Péclet number; `efie` (§8.5); `dlp` (§8.6). Right-hand sides: $\mathbf{1}$, $\mathbf{1}$, $\mathbf{V}$, $g$.
 
@@ -282,6 +284,44 @@ Nyström discretization with the trapezoid rule on $y(t) = (a\cos t, b\sin t)$; 
 $$\frac{\|e_k\|_A}{\|e_0\|_A} \le 2\Big(\frac{\sqrt\kappa-1}{\sqrt\kappa+1}\Big)^k. \tag{8.6}$$
 
 8.7 Implementation notes. Dense NumPy/SciPy, vectorized assembly; all kernels are deterministic and side-effect free, so concurrent `compute` calls are safe (store writes are atomic, §3.4). Numba is deferred until a profile demands it (D7). Matrix symbols ($A$, $H$, $R$, $V$) keep textbook case; `N803`/`N806` are silenced per file.
+
+8.8 Strong recursive skeletonisation (`h2.rss`). Points: a plate, the $m \times m$ cell centres of the unit square ($n = m^2$, $w = 1/n$), or a sphere, the Fibonacci lattice on the sphere of radius $\tfrac12$ centred in the unit cube ($w = \pi/n$). With $G(r) = e^{i\kappa r}/(4\pi r)$ and $\square_i$ the square of side $\sqrt w$ centred at $x_i$,
+$$A_{ij} = w\,G(|x_i - x_j|)\ (i \ne j),\qquad A_{ii} = \int_{\square_i} G(|y|)\,dy = \frac14\sum_{q=1}^{16} c_q\,\frac{e^{i\kappa\rho_q} - 1}{i\kappa},\quad \rho_q = \frac{\sqrt w}{2\cos\theta_q}, \tag{8.7}$$
+$\theta_q = \tfrac\pi8(u_q + 1)$, $(u_q, c_q)$ the 16-point Gauss–Legendre rule; $\kappa = 0$ gives $A_{ii} = \sqrt w\,\ln(1+\sqrt2)/\pi$. The factorisation runs in `precision` (complex64 by default, real when $\kappa = 0$), with `tol` $\ge 10\epsilon$ of that precision.
+
+Cluster tree: balanced binary of depth $d = \min\{d : \ell\,2^d \ge n\}$, $\ell$ = `leaf`, numbered breadth-first with children $2t+1, 2t+2$; each split is at the rank median along the axis minimising the larger child diameter (first minimiser); $[l_t, h_t]$ is the tight bounding box, $\operatorname{diam} t = |h_t - l_t|$. Lists, level by level from $N(0) = \{0\}$, with $C(t) = \operatorname{ch} N(\operatorname{pa} t)$ and $\delta$ the box distance:
+$$F(t) = \{s \in C(t) : \delta(t,s) > 0,\ \tfrac12(\operatorname{diam} t + \operatorname{diam} s) \le \eta\,\delta(t,s)\},\qquad N(t) = C(t) \setminus F(t). \tag{8.8}$$
+Every pair of leaves lies in exactly one block $t \times s$ with $s \in N(t)$ at level $d$ or $s \in F(t)$ at some level. Level $\lambda$ is coloured greedily in tree order,
+$$c(t) = \min\{c \ge 0 : c \ne c(u)\ \forall u \in N^2(t),\ u < t\},\qquad N^2(t) = \textstyle\bigcup_{s \in N(t)} N(s), \tag{8.9}$$
+so stages of one colour touch disjoint neighbourhoods and may run in parallel. Stage order is (colour, tree index); the DAG has an edge from each stage to every later stage in $N^2(t)$.
+
+Column ID by pivoted QR $M P = Q\begin{bmatrix} R_{11} & R_{12} \\ 0 & R_{22}\end{bmatrix}$, $S$ the first $k$ pivots, $R$ the rest, $\varepsilon$ = `tol`:
+$$k = \#\{j : |r_{jj}| > \varepsilon\,|r_{11}|\},\qquad T = R_{11}^{-1}R_{12},\qquad \|M_{:,R} - M_{:,S}T\|_F = \|R_{22}\|_F. \tag{8.10}$$
+
+**Algorithm 8.3 (strong RS-S).** Active DOFs $B_t$ (the leaf's indices at level $d$), near blocks $D_{ts} = A_{B_t B_s}$, no fill $\Phi$. Top level $\tau = \lambda_F - 1$, $\lambda_F$ the coarsest level with a far pair ($\tau = d$ if there is none). For $\lambda = d, \dots, \tau + 1$ and $t$ in stage order:
+1. Far field $K_{BF} = [A_{B_t B_s} + \Phi_{ts}]_{s \notin N(t)}$, $K_{FB}$ likewise; ID (8.10) of $\begin{bmatrix} \mathrm R(K_{FB}) \\ \mathrm R(K_{BF}^{T}) \end{bmatrix}$, $\mathrm R(\cdot)$ the thin-QR triangle (same pivots and $R_{ij}$ as the full far field).
+2. Shear rows $X_R \leftarrow X_R - T^{T}X_S$ and columns likewise in $D_{tt}$, $D_{ts}$, $D_{st}$: the far couplings of $R$ vanish up to (8.10).
+3. LU of $\tilde A_{RR}$; with $J = S \cup \bigcup_{s \in N(t)\setminus t} B_s$, $L_{21} = \tilde A_{JR}\tilde A_{RR}^{-1}$, $U_{12} = \tilde A_{RR}^{-1}\tilde A_{RJ}$.
+4. Schur update
+$$\tilde A_{JJ} \leftarrow \tilde A_{JJ} - L_{21}\tilde A_{RJ}; \tag{8.11}$$
+block $(a, b) \in N(t)^2$ adds to $D_{ab}$ if $b \in N(a)$, else to the fill $\Phi_{ab}$. Then $B_t \leftarrow B_t(S)$.
+
+After each level $B_p = B_{2p+1} \cup B_{2p+2}$; $D_{pq}$, $q \in N(p)$, is assembled from the child near blocks and, for far child pairs, $A$ plus their fill; the remaining fill moves to the parents. Finally, dense LU of $[D_{pq}]$ on level $\tau$. Solve: forward sweep (shear, $L_{21}$, $\tilde A_{RR}^{-1}$), top solve, backward sweep in reverse ($U_{12}$, $T$). The reported error is $\|\tilde x - x\|/\|x\|$ with $x = A^{-1}g$ by dense complex128 LU and $g$ complex Gaussian from `seed`. A singular pivot block raises `ComputeError`.
+
+Trace: `stage` rows $(t, \lambda, c(t), n_t, k_t, r_t, |J|)$; `stage_norm` $(\|K_{BF}\|_2, \|K_{FB}\|_2, \|R_{22}\|_F)$; `schur` rows (stage, $a$, $b$, fill) with $\|\Delta\|_F$ in `schur_norm`; `fill` rows $(\lambda, a, b)$, the fill entering level $\lambda$, with norms; `active` $(\lambda, \sum_t |B_t|)$ at the start of each level and at the top; `dof` per stage $[B_t(S), B_t(R)]$; `top` the top DOFs.
+
+Instance $n = 4096$, `leaf` 64 ($d = 6$), $\eta = 2.5$, $\kappa = 2\pi$, complex64: top level 2, colours 12, 10, 9, 6 on levels 6–3.
+
+| `tol` | $r_t/n_t$, leaves | active, levels 6 → 2 | error |
+|---|---|---|---|
+| 1e-3 | 0.70–0.88 | 4096, 844, 550, 251, 130 | 1.7e-4 |
+| 1e-4 | 0.56–0.78 | 4096, 1275, 818, 378, 192 | 1.9e-5 |
+| 1e-5 | 0.39–0.72 | 4096, 1768, 1148, 507, 264 | 2.3e-6 |
+
+Implementation: GEMMs go through SciPy's BLAS (`get_blas_funcs`), since the NumPy and SciPy wheels bundle separate OpenBLAS builds whose thread pools contend when calls interleave (about 8× slower); 2-norms of tall blocks come from their thin-QR triangles; the reference matrix is assembled in 512-row slabs.
+
+8.9 File-backed data (`data.npz`). The archive is read once and its SHA-256 must equal `sha256`, so the key (8.1) pins the content and later runs need no file. Members load with `allow_pickle=False`; a mismatch, an unreadable archive, a non-numeric member or a `meta` that is not a JSON object raises `ComputeError`. The kind brings arrays computed elsewhere (for example by the user) into scenes; its schema tells the planner not to invent it.
+
 ## 9 Scenes and rendering
 
 Algorithm 9.1 Scene generation: SPEC Algorithm 6.1.
@@ -311,6 +351,7 @@ Numerical arguments are literals or `ArrayRef` $(i, a)$: array $a$ of the `DataS
 | `field` | `values` $u_{ij}$ at $(x_j, y_i)$, $y$ upward | viridis heatmap | | |
 | `surface` | `points` $(n,3)$, `faces` $(m,3)$, `scalars` $(n)$ or $(m)$, `azimuth`, `elevation` | PyVista offscreen image | | |
 | `trace` | `lines` (plain text, not TeX), `steps` (line indices) | monospace listing, cursor at `steps[0]`; visits the others uniformly unless `goto` actions move it | `line:k` (0-based), `cursor` | `goto` |
+| `hierarchy` | `data`, `level`, `done`, `coloured`, `views` ⊆ {`plate`, `operator`}, `steps` (`do`, `part`) | cluster boxes, block operator in tree order (§9.15); step $i$ at $t_e + (i+1)(t_x-t_e)/(n+1)$ | | |
 | `code` | `code` (§9.10) | generated | index paths | the snippet's `act` |
 
 Every primitive also accepts dotted index paths (`1.0`) as parts. A TeX part isolates every occurrence of the substring that cuts no control word (`t` is not isolated inside `\to`). Undelimited arguments of `^`, `_` and accent or font macros are braced first (`x^2` to `x^{2}`, `\hat x` to `\hat{x}`), since an isolation marker before such an argument breaks the TeX; cuts inside braces are safe.
@@ -400,7 +441,21 @@ kept if it exists and a visual is alive; at most 8, evenly subsampled. A visual 
 2. LaTeX precompile is the build phase of the draft render: `compose` builds every mobject before any frame, and build errors are localized.
 3. Unit tests use a queued fake LLM (`tests/scene/fake.py`); no network.
 
-9.15 Decisions.
+9.15 `hierarchy` primitive. Draws an `h2.rss` DataSet (§8.8) from level $\lambda$ (default $d$, `done` stages already eliminated). Plate view (2-D points only): cluster boxes, grey or in their colour class, with a $k_t \mid r_t$ bar from split to eliminate, dimmed once eliminated. Operator view: the active matrix in tree order, block widths $\propto |B_t|$, rescaled to the full side on each level; near blocks orange, far blocks blue by level (darker is coarser, the background is the far field of level $\lambda$), fill amber, zeroed bands white, $S$ blue and $R$ red. Parts: `cluster` (BFS id on the level; `t` the first stage with the largest $|N(t)|$, `s` its next later neighbour; default the current cluster), `colour`, `block` $(a, b)$.
+
+| Action | Effect |
+|---|---|
+| `select`, `footprint`, `ring` | mark $t$ (exclusive), $N(t)$, $N^2(t) \setminus N(t)$ (dashed) |
+| `clear`, `colour` | unmark $t$ or all; colour $t$ or the level by $c(t)$ |
+| `rotate`, `split`, `zero`, `eliminate`, `schur`, `fill` | phases 1–6 of stage $t$, monotone: flash its rows and columns; split $S \mid R$; zero $R$ against the far field; shrink to $k_t$; flash $N(t)^2$; show its fill |
+| `drop` | remove a fill block on view |
+| `wave` | eliminate the pending stages of a colour (default the least), flashing the class |
+| `coarsen` | finish the level and merge children into parents |
+| `top` | one dense block on the top level |
+
+`advance` maps (state, step) to the next state and its flashes; `draw` maps a state to keyed specs; transition $i$ is one `Transform` per changed key. A vanishing near or fill block morphs into its parent's fill or near block (else the dense top), a box into its parent box; anything else fades; flashes run there and back. Items are created invisible on first use and removed at the next transition; an invisible anchor recovers the fit (9.2). There is no `AnimationGroup`, which `Scene.add` would restructure out of the board. `Board.step(i, t, run)` gives the cues of transition $i$ for any timing; steps closer than 0.1 s raise `AnimateError`.
+
+9.16 Decisions.
 
 | # | Decision | Reason |
 |---|---|---|
@@ -412,11 +467,12 @@ kept if it exists and a visual is alive; at most 8, evenly subsampled. A visual 
 | S6 | x264 without MB-tree | byte-identical clips; a 20 s 1080p30 scene renders in 19.7 s instead of 22.2 s, peaks at 0.55 GB instead of 0.95 GB, and is 32% larger at 2.3 dB higher PSNR |
 ## 10 Narration
 
-10.1 $\Phi_6$ maps each scene $s$ with lines $\ell_1,\dots,\ell_m$ to a `Narration`. Entry: `narrate.narrate(board, store, tts, verbalizer, workers) -> {scene id: digest}`.
+10.1 $\Phi_6$ maps each scene $s$ with lines $\ell_1,\dots,\ell_m$ to a `Narration`: audio, duration, spoken `words` and written `captions` with times, bookmark times. Entry: `narrate.narrate(board, store, tts, verbalizer, workers) -> {scene id: digest}`.
 
 | Module | Content |
 |---|---|
-| `verbalize` | split prose and inline math (`$…$`, `$$…$$`, `\(…\)`); `TEX` rewrites → MathML (MathJax 3.2.1) → speech (SRE 4.1.4, ClearSpeak) → `SPEECH` rewrites (§10.6), one `node sre.cjs` call per stage run |
+| `verbalize` | split prose and inline math (`$…$`, `$$…$$`, `\(…\)`); `TEX` rewrites → MathML (MathJax 3.2.1) → speech (SRE 4.1.4, ClearSpeak) → `SPEECH` rewrites (§10.6), one `node sre.cjs` call per stage run; source tokens as (written, spoken) pairs (§10.6) |
+| `written` | inline TeX → compact Unicode for captions (§10.6) |
 | `g2p` | spoken forms, espeak-ng IPA mapped to the misaki inventory, per-word alignment (Algorithm 10.2) |
 | `tts` | `TTS` protocol (`id`, `rate`, `synth(text) -> (int16 PCM, word spans)`); `Kokoro`, `Espeak`; WAV I/O |
 | `align` | sentence timeline: trim, fades, gaps, word and bookmark times (Algorithm 10.3) |
@@ -439,7 +495,7 @@ Other voices of the file: `am_michael` (US), `bf_emma`, `bm_george` (GB; prefix 
 
 10.3 Cache key. With $v$ the stage version,
 $$k = d\big(["\text{narrate}", v, d(\text{id}, \text{narration}), \text{tts.id}, \text{verbalizer.id}]\big). \tag{10.1}$$
-`tts.id` = `kokoro:` model SHA-256 prefix, voice, speed, $d$(lexicon, word list, phoneme map, vocab, voice style); `verbalizer.id` = `sre:` domain, $d$(`TEX`, `SPEECH`). Edits to visuals, math or duration of a scene do not trigger re-synthesis; edits to any pronunciation table do.
+`tts.id` = `kokoro:` model SHA-256 prefix, voice, speed, $d$(lexicon, word list, phoneme map, vocab, voice style); `verbalizer.id` = `sre:` domain, $d$(`TEX`, `SPEECH`). Edits to visuals, math or duration of a scene do not trigger re-synthesis; edits to any pronunciation table do. `written` and the `align` constants are covered by $v$.
 
 10.4 Sentences. Lines are joined until one ends in `.`, `!` or `?` (closing quotes and brackets allowed after it); each sentence is one `synth` call, so intonation runs across line boundaries. A bookmark is the index of its line's first word within the sentence.
 
@@ -472,13 +528,17 @@ Duration $= L + T + (K-1)G + \sum_k (b_k - a_k)/r$. Silence between sentences is
 
 10.5 Accuracy. Word times are the model's token durations, exact to one frame (25 ms); bookmarks are word starts, so $Q_3$ holds by construction. Measured on the §2.8 test narration (11 scenes, 789 words, `af_heart`, speed 0.85): 140 wpm overall, 151 wpm within sentences; Whisper base.en (offline) transcribed 92.7 % of the words verbatim, the rest spelling variants (*colour*, numerals).
 
-10.6 Math speech. `TEX` rewrites before SRE: `\mathcal H^2` → H two; two-digit subscripts spaced; upright superscript words read as words. `SPEECH` rewrites after SRE turn ClearSpeak into lecture style: powers $-1$, $T$, $-T$, $*$, $H$ → inverse, transpose, inverse transpose, star, Hermitian; *raised to the k power* → to the k; fractions and *divided by* → over; *the metric of x sub 2* → the 2 norm of x; *script l* → ell; *O of* → order; font words, parentheses and *sub* dropped; *comma dot dot dot comma* → up to; *negative* → minus; *is a member of* → in.
+10.6 Math speech and captions. `TEX` rewrites before SRE: `\mathcal H^2` → H two; two-digit subscripts spaced; upright superscript words read as words. `SPEECH` rewrites after SRE turn ClearSpeak into lecture style: powers $-1$, $T$, $-T$, $*$, $H$ → inverse, transpose, inverse transpose, star, Hermitian; *raised to the k power* → to the k; fractions and *divided by* → over; *the metric of x sub 2* → the 2 norm of x; *script l* → ell; *O of* → order; font words, parentheses and *sub* dropped; *comma dot dot dot comma* → up to; *negative* → minus; *is a member of* → in.
 
-| TeX | Spoken |
-|---|---|
-| `L_{21}`, `D_{RR}`, `\mathcal N(t)` | L 2 1, D R R, N of t |
-| `\epsilon_L/u`, `\chi/(1-\chi)` | epsilon L over u, chi over 1 minus chi |
-| `\mathcal H^2`, `\|A^{-1}\|_2` | H two, the 2 norm of A inverse |
+| TeX | Spoken | Caption |
+|---|---|---|
+| `L_{21}`, `D_{RR}`, `\mathcal N(t)` | L 2 1, D R R, N of t | L₂₁, D_RR, 𝒩(t) |
+| `\epsilon_L/u`, `\chi/(1-\chi)` | epsilon L over u, chi over 1 minus chi | ε_L/u, χ/(1−χ) |
+| `\mathcal H^2`, `\|A^{-1}\|_2` | H two, the 2 norm of A inverse | ℋ², ‖A⁻¹‖₂ |
+
+Captions show what is written, speech what is said. `Verbalizer.tokens` splits each line at prose whitespace into source tokens $\tau_1,\dots,\tau_q$, a formula with the punctuation touching it being one token, each with its written and spoken form. The written form of a formula is `written(tex)`, a recursive descent over TeX tokens: Greek letters and operators as symbols; `\mathcal`, `\mathbb` letters; sub- and superscripts in Unicode when every character has one and the script is no word of three or more letters, else `_max`, `_(i,j)`; `\frac{a}{b}` as $a/b$, compound parts parenthesized; accents as combining marks; relations spaced; `\left`, `\right`, fonts and environments dropped; other commands kept by name. With $n_j$ spoken words in $\tau_j$ and $N_j = \sum_{i\le j} n_i$, caption $j$ spans
+$$\big[\text{start}(w_{N_{j-1}+1}),\; \text{end}(w_{N_j})\big], \tag{10.3}$$
+so a caption boundary is a token boundary; tokens with no spoken word are dropped. `words` keeps the spoken words (bookmarks, $Q_3$); `captions` feeds the subtitles (§11.3).
 
 10.7 Concurrency. Scenes run on a thread pool of `workers`; formulas of all uncached scenes are verbalized in one subprocess before the pool starts; the ONNX session is shared (thread-safe `run`) with `intra_op_num_threads` fixed for determinism.
 
@@ -504,7 +564,7 @@ Segment $i$ is exactly $n_i$ frames and $S_i$ samples; $\sum_i S_i = \operatorna
 
 Why not linear `loudnorm`: its linear mode needs measured peak plus gain below the target peak; speech whose true peak exceeds its loudness by more than 14.5 dB (Kokoro at speed 0.85: ≈ 20 dB) forces the dynamic mode, which pumps. A fixed gain and a look-ahead limiter that only touches transients keep $I$ within 1 LU of the target and the true peak below $-1.5$ dBTP after AAC (§2.8 test, three scenes: $-16.4$ LUFS, $-2.0$ dBTP; sine with sparse impulses: $-16.6$ LUFS, $-2.5$ dBTP). One gain serves the whole film, so scenes differ only by their own loudness (Kokoro: 0.65 LU spread over 11 scenes).
 
-11.3 Subtitles. Words are grouped greedily into cues, closed at a word ending in `. ? ! ; :`, before exceeding 84 characters, or before spanning 6 s; cues longer than 42 characters wrap once at the space nearest the middle; text is HTML-escaped. The global VTT is built here, since only assembly knows $T_i$.
+11.3 Subtitles. Caption tokens (§10.6; the words when a narration has none) are grouped greedily into cues, closed at a token ending in `. ? ! ; :`, before exceeding 84 characters, or before spanning 6 s; cues longer than 42 characters wrap once at the space nearest the middle; text is HTML-escaped. A cue never splits a formula. The global VTT is built here, since only assembly knows $T_i$.
 
 11.4 Manifest. `artifacts` = {`storyboard`, `render/<id>`, `narration/<id>`}; `versions` = {`assemble`, `ffmpeg`}; `timings_s.assemble`; `metrics` = {`duration_s` $=T_N$, `loudness_in_lufs`, `true_peak_in_dbtp` (narration, pass 1), `loudness_out_lufs`, `true_peak_out_dbtp` (encoded output, pass 3)}. `usage` is zero; the orchestrator adds stage usage.
 
@@ -581,6 +641,8 @@ $f$ the animate function's qualified name, $\pi_5$ = (`width`, `height`, `fps`, 
 | `tests/extract` | ≈ 2 s on 4 cores |
 | `tests/scene` WP8 part | ≈ 10 s on 4 cores |
 | Narration, Kokoro `af_heart`, 789 words (340 s of audio), 4 threads | 186 s |
+| `h2.rss`, $n = 4096$, `tol` 1e-5 | factorisation 3.2 s; with the dense reference 8 s |
+| `hierarchy`, full instance, 13 steps, 1080p30 | 41 s for 20.5 s of video, about 850 items per state |
 
 ## 14 Decisions log
 
@@ -593,3 +655,8 @@ $f$ the animate function's qualified name, $\pi_5$ = (`width`, `height`, `fps`, 
 | D5 | 2026-10-07 | Commits authored by the user, no co-author trailers | user preference |
 | D6 | 2026-10-07 | `requirements.lock` instead of `uv.lock` (177 kB) | Drive transfer size |
 | D7 | 2026-10-07 | Numerics in NumPy/SciPy without Numba | largest admissible request < 4 s; `hankel2` has no Numba support |
+| D8 | 2026-10-07 | `h2.rss` is textbook strong RS-S: $\eta = 2.5$, tree-order greedy distance-2 colouring, fill kept and recompressed with the far field | reference method; variants are computed by consumers from the DataSet |
+| D9 | 2026-10-07 | Self-term of (8.7) is the exact cell integral | bounded, mesh-consistent diagonal |
+| D10 | 2026-10-07 | GEMMs in `h2` through SciPy's BLAS | NumPy and SciPy OpenBLAS pools contend (about 8×) |
+| D11 | 2026-10-07 | `hierarchy` morphs keyed items with per-item `Transform`s | `Scene.add` dissolves groups not yet in the scene |
+| D12 | 2026-10-07 | User-supplied arrays enter as `data.npz` by path and SHA-256 | external runs feed primitives without new kernels; the hash pins cache and content |

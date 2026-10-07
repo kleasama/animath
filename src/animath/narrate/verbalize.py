@@ -6,6 +6,7 @@ from pathlib import Path
 from animath.core.errors import NarrateError
 from animath.core.hashing import digest_of
 from animath.narrate.proc import run
+from animath.narrate.written import written
 
 MATH = re.compile(r"\$\$(.+?)\$\$|(?<!\\)\$(.+?)(?<!\\)\$|\\\((.+?)\\\)", re.S)
 SCRIPT = Path(__file__).with_name("sre.cjs")
@@ -79,8 +80,27 @@ class Verbalizer:
             raise NarrateError(f"verbalizer returned {out!r} for {len(latex)} formulas")
         return [" ".join(rewrite(str(s), SPEECH).split()) for s in out]
 
-    def lines(self, texts: Sequence[str]) -> list[str]:
-        """Spoken form of each text; one subprocess call for all formulas."""
+    def tokens(self, texts: Sequence[str]) -> list[list[tuple[str, str]]]:
+        """Whitespace-separated source tokens of each text as (written, spoken); one call to SRE."""
         parts = [split(t) for t in texts]
         spoken = iter(self.speak([s for p in parts for s, m in p if m]))
-        return [" ".join("".join(next(spoken) if m else s for s, m in p).split()) for p in parts]
+        out = []
+        for p in parts:
+            toks: list[tuple[str, str]] = []
+            w = s = ""
+            for seg, m in p:
+                pieces = re.split(r"(\s+)", seg)
+                for x, y in (
+                    [(written(seg), next(spoken))] if m else zip(pieces, pieces, strict=True)
+                ):
+                    if x.isspace():
+                        toks += [(w, s)] if w or s else []
+                        w = s = ""
+                    else:
+                        w, s = w + x, s + y
+            out.append([*toks, (w, s)] if w or s else toks)
+        return out
+
+    def lines(self, texts: Sequence[str]) -> list[str]:
+        """Spoken form of each text."""
+        return [" ".join(" ".join(s for _, s in t).split()) for t in self.tokens(texts)]

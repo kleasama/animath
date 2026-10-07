@@ -42,8 +42,18 @@ def build(name: str, ctx: Context, **args: Any) -> Any:
 
 def test_catalog() -> None:
     cat = catalog()
-    names = {"text", "equation", "derive", "matrix", "plot", "field", "surface", "trace", "code"}
-    assert set(cat) == names
+    assert set(cat) == {
+        "text",
+        "equation",
+        "derive",
+        "matrix",
+        "plot",
+        "field",
+        "surface",
+        "trace",
+        "hierarchy",
+        "code",
+    }
     assert all(
         {"region", "until", "actions", "view"} <= set(cast(dict[str, Any], s["properties"]))
         and "resume" not in cast(dict[str, Any], s["properties"])

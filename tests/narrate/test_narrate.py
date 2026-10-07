@@ -72,6 +72,8 @@ def test_narrate_produces_valid_narrations(store: Store, verbalizer: Verbalizer)
     assert n.scene_id == "s1"
     assert n.bookmarks == {"k": 0.303}
     assert [w.text for w in n.words] == ["Minimise", "ex", "over", "K.", "Stop."]
+    assert [c.text for c in n.captions] == ["Minimise", "r", "over", "K.", "Stop."]
+    assert [(c.start, c.end) for c in n.captions] == [(w.start, w.end) for w in n.words]
     assert (n.words[3].end, n.words[4].start) == (0.463, 0.875)
     assert n.duration_s == (300 + 172 + 400 + 52 + 600) / 1000
     assert from_wav(store.get_blob(n.audio), 1000).size == 1524
