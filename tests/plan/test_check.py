@@ -1,11 +1,12 @@
 import json
+from collections.abc import Sequence
 from typing import Any
 
 import pytest
 from pydantic import JsonValue
 
 from animath.core.schemas import KnowledgeGraph, Node, NodeKind, Params
-from animath.plan.check import build, plan, position, script, static, words
+from animath.plan.check import build, plan, position, script, spoken, static, words
 from animath.plan.draft import DAction, DData, DLine, DLoop, Draft, DScene
 from animath.plan.select import Selection, select
 from tests.plan.conftest import T, line, make_draft, vis
@@ -66,7 +67,7 @@ def test_script_holds_and_bookmarks() -> None:
     ds = DScene(
         id="s",
         goal="g",
-        narration=[line(2, "a"), line(3), line(1, "c")],
+        narration=[line(2, "a"), DLine(text="word word word."), line(1, "c")],
         visuals=[vis("text", "c", text="t")],
     )
     errs: list[str] = []
@@ -74,7 +75,7 @@ def test_script_holds_and_bookmarks() -> None:
     assert errs == []
     assert [b.bookmark for b in beats] == ["a", "#1", "c"]
     assert [b.pause for b in beats] == [0.0, 0.0, 1.0]
-    assert [b.onset for b in beats] == pytest.approx([0.0, 2.35, 5.7])
+    assert [b.onset for b in beats] == pytest.approx([0.4, 2.4, 5.75])
 
 
 def test_loop_per_item_brief() -> None:
@@ -155,7 +156,7 @@ def test_valid_board(draft: Draft, sel: Selection, cat: Cat, kernels: Cat) -> No
     board, errs = build(draft, sel, T, cat, kernels)
     assert errs == []
     assert board is not None
-    assert [s.duration_s for s in board.scenes] == pytest.approx([16.869, 11.131], abs=1e-3)
+    assert [s.duration_s for s in board.scenes] == pytest.approx([16.790, 11.210], abs=1e-3)
     assert board.duration_s == pytest.approx(T)
     assert board.symbols == {"Z": "impedance matrix"}
     s1 = board.scenes[0]
@@ -179,14 +180,45 @@ def test_no_scenes(sel: Selection, cat: Cat, kernels: Cat) -> None:
     assert errors(Draft(title="x", scenes=[]), sel, cat, kernels) == ["no scenes"]
 
 
+def test_spoken_words_set_the_length(sel: Selection, cat: Cat, kernels: Cat) -> None:
+    calls: list[list[str]] = []
+
+    def said(texts: Sequence[str]) -> list[str]:
+        calls.append(list(texts))
+        return [f"{t} uh" for t in texts]
+
+    assert build(make_draft(), sel, T, cat, kernels, 135, said) == (
+        None,
+        [
+            "estimated length 31 s at 135 words per minute with gaps and pauses, target 28 s "
+            "within 10%: cut about 7 words"
+        ],
+    )
+    assert calls == [[" ".join(["word"] * 10)]]
+
+
+def test_spoken_lines_are_the_expanded_script() -> None:
+    d = Draft(title="t", scenes=[loop_scene(["e {}", "g"])])
+    calls: list[list[str]] = []
+
+    def said(texts: Sequence[str]) -> list[str]:
+        calls.append(list(texts))
+        return ["x $y$ z"] * len(texts)
+
+    count = spoken(d, 60, said)
+    assert calls == [["a b c d", "e 2", "g"]]
+    assert count("e 2") == 3
+    assert spoken(d, 60, None) is words
+
+
 def test_length_budget(sel: Selection, cat: Cat, kernels: Cat) -> None:
     d = edit(1, narration=[line(10, None, act(1, "indicate")) for _ in range(3)])
     assert errors(d, sel, cat, kernels) == [
-        "estimated length 33 s at 135 words per minute with gaps and pauses, target 28 s within "
-        "10%: cut about 11 words"
+        "estimated length 34 s at 135 words per minute with gaps and pauses, target 28 s within "
+        "10%: cut about 12 words"
     ]
     (e,) = errors(edit(1, narration=[line(10)]), sel, cat, kernels)
-    assert e.endswith("target 28 s within 10%: add about 12 words")
+    assert e.endswith("target 28 s within 10%: add about 11 words")
 
 
 @pytest.mark.parametrize(
@@ -438,7 +470,7 @@ def test_kernels_optional(sel: Selection, cat: Cat) -> None:
 def test_scene_returns_none_only_for_own_errors(sel: Selection, cat: Cat, kernels: Cat) -> None:
     d = make_draft()
     d.scenes.append(DScene(id="s3", goal="g", narration=[line(1)], visuals=[], nodes=[]))
-    assert errors(d, sel, cat, kernels) == ["scene s3: no visuals"]
+    assert build(d, sel, 30.0, cat, kernels) == (None, ["scene s3: no visuals"])
 
 
 def test_board_args_are_json(sel: Selection, cat: Cat, kernels: Cat) -> None:
