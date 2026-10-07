@@ -39,8 +39,8 @@ def test_digest_is_sha256_and_canonical_ignores_key_order() -> None:
 
 def test_params_bounds() -> None:
     p = Params()
-    assert (p.width, p.height, p.fps, p.duration_s) == (1920, 1080, 60, 180.0)
-    for bad in ({"width": 1921}, {"duration_s": 0}, {"fps": 240}, {"budget_usd": 0}):
+    assert (p.width, p.height, p.fps, p.duration_s, p.wpm) == (1920, 1080, 60, 180.0, 135)
+    for bad in ({"width": 1921}, {"duration_s": 0}, {"fps": 240}, {"budget_usd": 0}, {"wpm": 79}):
         with pytest.raises(ValidationError):
             Params.model_validate(bad)
 
@@ -116,6 +116,9 @@ def test_graph_diamond_is_acyclic() -> None:
 def test_scene_cues_and_storyboard(board: Storyboard) -> None:
     assert board.duration_s == pytest.approx(20.0)
     line = Line(text="x", bookmark="a")
+    assert line.pause_s == 0.0
+    with pytest.raises(ValidationError):
+        Line(text="x", pause_s=-1.0)
     with pytest.raises(ValidationError, match="duplicate bookmarks"):
         Scene(id="s", goal="g", narration=(line, line), duration_s=1)
     with pytest.raises(ValidationError, match=r"unknown bookmarks \['b'\]"):
