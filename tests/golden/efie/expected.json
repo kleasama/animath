@@ -1,0 +1,77 @@
+{
+ "title": "Method of moments for the EFIE",
+ "blocks": [
+  {
+   "id": "b0",
+   "type": "heading",
+   "text": "Electric field integral equation",
+   "label": "sec:efie",
+   "level": 1
+  },
+  {
+   "id": "b1",
+   "type": "paragraph",
+   "text": "Let $S$ be a perfectly conducting surface with unit normal $\\hat{\\mathbf n}$, illuminated by $\\mathbf E^{\\mathrm{inc}}$. The surface current $\\mathbf J$ satisfies [harrington1968]",
+   "refs": [
+    "harrington1968"
+   ]
+  },
+  {
+   "id": "b2",
+   "type": "equation",
+   "latex": "\\hat{\\mathbf n}\\times\\mathcal T\\mathbf J=-\\hat{\\mathbf n}\\times\\mathbf E^{\\mathrm{inc}},\\quad\n\\mathcal T\\mathbf J=-\\mathrm j\\omega\\mu\\int_S G\\,\\mathbf J\\,\\mathrm dS'\n+\\frac{1}{\\mathrm j\\omega\\varepsilon}\\nabla\\int_S G\\,\\nabla'\\cdot\\mathbf J\\,\\mathrm dS',",
+   "label": "eq:efie"
+  },
+  {
+   "id": "b3",
+   "type": "paragraph",
+   "text": "with $G(\\mathbf r,\\mathbf r')=\\mathrm e^{-\\mathrm jk|\\mathbf r-\\mathbf r'|}/(4\\pi|\\mathbf r-\\mathbf r'|)$."
+  },
+  {
+   "id": "b4",
+   "type": "heading",
+   "text": "Galerkin discretization",
+   "label": "sec:mom",
+   "level": 1
+  },
+  {
+   "id": "b5",
+   "type": "paragraph",
+   "text": "Expand $\\mathbf J\\approx\\sum_{n=1}^N I_n\\mathbf f_n$ in RWG functions [rao1982] and test (eq:efie) with $\\mathbf f_m$, $m=1,\\dots,N$:",
+   "refs": [
+    "rao1982",
+    "eq:efie"
+   ]
+  },
+  {
+   "id": "b6",
+   "type": "equation",
+   "latex": "\\mathbf Z\\mathbf I=\\mathbf V,\\qquad\nZ_{mn}=\\langle\\mathbf f_m,\\mathcal T\\mathbf f_n\\rangle,\\quad\nV_m=-\\langle\\mathbf f_m,\\mathbf E^{\\mathrm{inc}}\\rangle.",
+   "label": "eq:mom"
+  },
+  {
+   "id": "b7",
+   "type": "theorem",
+   "text": "If $k$ is not an interior resonant wavenumber of $S$, then $\\mathcal T$ is injective.",
+   "label": "thm:unique",
+   "env": "theorem"
+  },
+  {
+   "id": "b8",
+   "type": "paragraph",
+   "text": "Cost of a direct solution of (eq:mom):",
+   "refs": [
+    "eq:mom"
+   ]
+  },
+  {
+   "id": "b9",
+   "type": "list",
+   "text": "- matrix fill: $O(N^2)$;\n- LU factorization: $O(N^3)$."
+  }
+ ],
+ "bib": {
+  "harrington1968": "R. F. Harrington, Field Computation by Moment Methods, Macmillan, 1968",
+  "rao1982": "S. M. Rao and D. R. Wilton and A. W. Glisson, Electromagnetic scattering by surfaces of arbitrary shape, IEEE Trans. Antennas Propag., 1982"
+ }
+}

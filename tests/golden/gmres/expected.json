@@ -1,0 +1,91 @@
+{
+ "title": "GMRES",
+ "blocks": [
+  {
+   "id": "b0",
+   "type": "heading",
+   "text": "Problem",
+   "label": "sec:problem",
+   "level": 1
+  },
+  {
+   "id": "b1",
+   "type": "paragraph",
+   "text": "Let $A\\in\\mathbb{R}^{n\\times n}$ be nonsingular and $b\\in\\mathbb{R}^n$. With $x_0=0$, $r_0=b$ and $\\beta=\\|r_0\\|_2$, GMRES [saad1986] computes",
+   "refs": [
+    "saad1986"
+   ]
+  },
+  {
+   "id": "b2",
+   "type": "equation",
+   "latex": "x_m=\\mathop{\\mathrm{arg\\,min}}_{x\\in\\mathcal{K}_{m}(A,r_0)}\\|b-Ax\\|_2 .",
+   "label": "eq:gmres"
+  },
+  {
+   "id": "b3",
+   "type": "heading",
+   "text": "Arnoldi process",
+   "label": "sec:arnoldi",
+   "level": 1
+  },
+  {
+   "id": "b4",
+   "type": "paragraph",
+   "text": "Algorithm alg:arnoldi builds an orthonormal basis $V_m$ of $\\mathcal{K}_{m}(A,r_0)$ and $\\bar H_m\\in\\mathbb{R}^{(m+1)\\times m}$ with",
+   "refs": [
+    "alg:arnoldi"
+   ]
+  },
+  {
+   "id": "b5",
+   "type": "equation",
+   "latex": "\\begin{aligned}\nA V_m &= V_{m+1}\\bar H_m, \\\\\nV_{m+1}^\\top V_{m+1} &= I.\n\\end{aligned}",
+   "label": "eq:arnoldi"
+  },
+  {
+   "id": "b6",
+   "type": "algorithm",
+   "text": "Arnoldi with modified Gram--Schmidt\nRequire: $A$, $r_0$, $m$\n$v_1 \\gets r_0/\\|r_0\\|_2$\nfor $j = 1,\\dots,m$ do\n  $w \\gets A v_j$\n  for $i = 1,\\dots,j$ do\n    $h_{ij} \\gets v_i^\\top w$ ▷ projection\n    $w \\gets w - h_{ij} v_i$\n  end for\n  $h_{j+1,j} \\gets \\|w\\|_2$\n  if $h_{j+1,j} = 0$ then\n    return ▷ invariant subspace\n  end if\n  $v_{j+1} \\gets w / h_{j+1,j}$\nend for",
+   "latex": "\\begin{algorithm}\n\\caption{Arnoldi with modified Gram--Schmidt}\\label{alg:arnoldi}\n\\begin{algorithmic}[1]\n\\Require $A$, $r_0$, $m$\n\\State $v_1 \\gets r_0/\\|r_0\\|_2$\n\\For{$j = 1,\\dots,m$}\n  \\State $w \\gets A v_j$\n  \\For{$i = 1,\\dots,j$}\n    \\State $h_{ij} \\gets v_i^\\top w$ \\Comment{projection}\n    \\State $w \\gets w - h_{ij} v_i$\n  \\EndFor\n  \\State $h_{j+1,j} \\gets \\|w\\|_2$\n  \\If{$h_{j+1,j} = 0$}\n    \\State \\Return \\Comment{invariant subspace}\n  \\EndIf\n  \\State $v_{j+1} \\gets w / h_{j+1,j}$\n\\EndFor\n\\end{algorithmic}\n\\end{algorithm}",
+   "label": "alg:arnoldi",
+   "env": "algorithm"
+  },
+  {
+   "id": "b7",
+   "type": "theorem",
+   "text": "(Least squares). By (eq:arnoldi) and (eq:orth), $x_m=V_m y_m$ with $$y_m=\\mathop{\\mathrm{arg\\,min}}_{y\\in\\mathbb{R}^m}\\|\\beta e_1-\\bar H_m y\\|_2 .$$",
+   "label": "thm:ls",
+   "env": "theorem",
+   "refs": [
+    "eq:arnoldi"
+   ]
+  },
+  {
+   "id": "b8",
+   "type": "equation",
+   "latex": "y_m=\\mathop{\\mathrm{arg\\,min}}_{y\\in\\mathbb{R}^m}\\|\\beta e_1-\\bar H_m y\\|_2 ."
+  },
+  {
+   "id": "b9",
+   "type": "proof",
+   "text": "For $x=V_m y$, $b-Ax=V_{m+1}(\\beta e_1-\\bar H_m y)$, and $V_{m+1}$ has orthonormal columns.",
+   "env": "proof"
+  },
+  {
+   "id": "b10",
+   "type": "theorem",
+   "text": "In exact arithmetic, GMRES terminates in at most $n$ steps.",
+   "label": "lem:term",
+   "env": "lemma"
+  }
+ ],
+ "macros": {
+  "\\R": "\\newcommand{\\R}{\\mathbb{R}}",
+  "\\K": "\\newcommand{\\K}[2]{\\mathcal{K}_{#1}(#2)}",
+  "\\argmin": "\\DeclareMathOperator*{\\argmin}{arg\\,min}"
+ },
+ "bib": {
+  "saad1986": "Y. Saad and M. H. Schultz, GMRES: A generalized minimal residual algorithm for solving nonsymmetric linear systems, SIAM J. Sci. Stat. Comput., 1986"
+ }
+}

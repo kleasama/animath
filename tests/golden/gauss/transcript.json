@@ -1,0 +1,105 @@
+{
+ "title": "Gauss–Legendre quadrature",
+ "blocks": [
+  {
+   "type": "heading",
+   "text": "Rule",
+   "latex": null,
+   "label": "sec:1",
+   "level": 1,
+   "env": null,
+   "refs": [],
+   "page": 1
+  },
+  {
+   "type": "paragraph",
+   "text": "For $f\\in C[-1,1]$ the $n$-point Gauss–Legendre rule is",
+   "latex": null,
+   "label": null,
+   "level": null,
+   "env": null,
+   "refs": [],
+   "page": 1
+  },
+  {
+   "type": "equation",
+   "text": "",
+   "latex": "\\int_{-1}^{1} f(x)\\,\\mathrm dx \\approx \\sum_{i=1}^{n} w_i f(x_i)",
+   "label": "eq:1",
+   "level": null,
+   "env": null,
+   "refs": [],
+   "page": 1
+  },
+  {
+   "type": "paragraph",
+   "text": "where $x_1<\\dots<x_n$ are the zeros of the Legendre polynomial $P_n$ and",
+   "latex": null,
+   "label": null,
+   "level": null,
+   "env": null,
+   "refs": [],
+   "page": 1
+  },
+  {
+   "type": "equation",
+   "text": "",
+   "latex": "w_i=\\frac{2}{(1-x_i^2)\\,[P_n'(x_i)]^2}",
+   "label": "eq:2",
+   "level": null,
+   "env": null,
+   "refs": [],
+   "page": 1
+  },
+  {
+   "type": "theorem",
+   "text": "Rule (eq:1) is exact for all polynomials of degree at most $2n-1$, and for $f\\in C^{2n}[-1,1]$ there is $\\xi\\in(-1,1)$ with $$\\int_{-1}^{1} f(x)\\,\\mathrm dx-\\sum_{i=1}^{n} w_i f(x_i)=\\frac{2^{2n+1}(n!)^4}{(2n+1)[(2n)!]^3}f^{(2n)}(\\xi)$$",
+   "latex": null,
+   "label": "thm:1",
+   "level": null,
+   "env": "theorem",
+   "refs": [
+    "eq:1"
+   ],
+   "page": 1
+  },
+  {
+   "type": "equation",
+   "text": "",
+   "latex": "\\int_{-1}^{1} f(x)\\,\\mathrm dx-\\sum_{i=1}^{n} w_i f(x_i)=\\frac{2^{2n+1}(n!)^4}{(2n+1)[(2n)!]^3}f^{(2n)}(\\xi)",
+   "label": null,
+   "level": null,
+   "env": null,
+   "refs": [],
+   "page": 1
+  },
+  {
+   "type": "heading",
+   "text": "Computation",
+   "latex": null,
+   "label": "sec:2",
+   "level": 1,
+   "env": null,
+   "refs": [],
+   "page": 1
+  },
+  {
+   "type": "paragraph",
+   "text": "The nodes are the eigenvalues of the symmetric tridiagonal Jacobi matrix $J_n$ with $(J_n)_{i,i+1}=(J_n)_{i+1,i}=\\beta_i=i/\\sqrt{4i^2-1}$, and $w_i=2v_{1i}^2$ for the normalized eigenvectors $v_i$ of $J_n$ [1].",
+   "latex": null,
+   "label": null,
+   "level": null,
+   "env": null,
+   "refs": [
+    "1"
+   ],
+   "page": 1
+  }
+ ],
+ "bib": [
+  {
+   "key": "1",
+   "text": "G. H. Golub, J. H. Welsch, Calculation of Gauss quadrature rules, Math. Comp. 23 (1969) 221–230."
+  }
+ ]
+}

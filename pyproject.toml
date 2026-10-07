@@ -7,7 +7,13 @@ name = "animath"
 version = "0.1.0"
 description = "Mathematical source to educational video."
 requires-python = ">=3.12"
-dependencies = ["pydantic>=2.13,<3", "anthropic>=1.11,<2"]
+dependencies = [
+  "pydantic>=2.13,<3",
+  "anthropic>=1.11,<2",
+  "pypandoc-binary>=1.17,<2",
+  "pypdfium2>=5.14,<6",
+  "pillow>=12.3,<13",
+]
 
 [project.scripts]
 animath = "animath.cli:main"

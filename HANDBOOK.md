@@ -56,6 +56,74 @@ A stage is skipped iff an artifact is indexed under $k_\sigma$ (SPEC Invariants 
 4.3 `Replay`: key $d([\text{model:effort}, \text{JSON schema}, \text{system}, \text{prompt}, [d(\text{image}_i)]])$; hit returns cached instance with zero usage; offline miss raises `LLMError`. Unit tests run offline.
 
 ## 5 Ingestion
+
+5.1 Interface. `ingest.run(bundle, store, llm, fetch=None, check=None, workers=1) -> (DocIR, Usage)`. Stage key
+$$k_{\text{ingest}} = d\big([\text{ingest}, v, d(\text{bundle}), [\text{fetch}\neq\varnothing], [\text{check}\neq\varnothing]]\big); \tag{5.1}$$
+a hit returns the stored `DocIR` with zero usage. The orchestrator passes `fetch=ingest.fetch_url`, `check=ingest.compile_errors`.
+
+5.2 Modules.
+
+| Module | Content |
+|---|---|
+| `blocks` | pandoc (pinned, `pypandoc-binary`) JSON AST $\to$ `Block`s; `document`, `ir` |
+| `latex` | flatten, comments, macros, bibliographies, algorithm extraction, `parse` |
+| `pdf` | arXiv source lookup, page rasters, transcription, `merge`, `parse` |
+| `check` | equation compile check |
+
+5.3 AST map. Display math splits a paragraph; theorem-like, proof, list, figure blocks carry their prose as `text`, display math inline as `$$…$$`, and each display also becomes an `equation` block after the container.
+
+| Pandoc node | Block |
+|---|---|
+| `Header` | heading, level $\min(\max(\ell,1),6)$, label = explicit id |
+| `Para`, `Plain` | paragraph(s) and equation(s) |
+| `Math DisplayMath`, raw `equation`/`align`/`gather`/`multline` | equation; `align`$\to$`aligned`, `gather`,`multline`$\to$`gathered` |
+| `Div` of a theorem class (§5.4) / `proof` | theorem (`env` = class) / proof |
+| `BulletList`, `OrderedList` | list, one line per item |
+| `Figure` | figure, `text` = caption |
+| `CodeBlock` | code |
+| token `ANIMATHALG<i>` | algorithm $i$ (Algorithm 5.1) |
+| other | paragraph of all inline text; `HorizontalRule`, non-math raw blocks dropped |
+
+5.4 Theorem classes: fixed set (`blocks.THEOREMS`) $\cup$ `\newtheorem` names. LaTeX heads (`Theorem 1`, `Proof.`) are stripped; an optional name stays as `(Name).`.
+
+5.5 Labels and references. An equation takes its first `\label`; later labels of the same display are aliases rewritten in `refs`. `\label`, `\nonumber`, `\notag` are removed from `latex`. Inline forms: `\eqref{l}` $\to$ `(l)`, `\ref{l}` $\to$ `l`, citations $\to$ `[k₁; k₂]`. Unresolved refs raise `IngestError` (MD, LaTeX).
+
+**Algorithm 5.1 (LaTeX).**
+1. Decode UTF-8, else Latin-1; strip comments (`%` not preceded by an odd run of `\`).
+2. Resolve `\input`/`\include` recursively relative to the entry directory; cycles and missing files raise.
+3. Macros: `\(re|provide|new)command`, `\DeclareMathOperator`, `\def` $\mapsto$ full declaration (`DocIR.macros`).
+4. Bibliography: `thebibliography` items; then `<entry>.bbl` if present, else `\bibliography`/`\addbibresource` `.bib` files (author, title, journal | booktitle, publisher, year).
+5. Replace `algorithm`/`algorithmic` environments by tokens; text = caption, then algorithmic(x) steps, one per line, indented by nesting.
+6. Pandoc `latex-auto_identifiers` (macros expanded in math); map by §5.3.
+
+**Algorithm 5.2 (PDF).**
+1. If `fetch` is given and page 1 carries an arXiv identifier, fetch `arxiv.org/e-print/<id>`; a TeX source (tar or single file; main = `\documentclass` and `\begin{document}`, shallowest path) goes to Algorithm 5.1. Fetch or unpack failure is logged, then step 2.
+2. Render pages at scale 2 (144 dpi) to PNG.
+3. Chunks of 4 pages, transcribed in parallel (`workers`) into `pdf.Transcript` by `llm.parse` (structured output, system prompt `pdf.SYSTEM`).
+4. If `check` is given, equations failing Algorithm 5.3 are returned to the model with their errors; at most $N_{\text{retry}}$ repairs, then `IngestError`.
+5. Merge: title = first non-null; duplicate labels dropped after the first; equations without LaTeX become paragraphs; levels kept for headings only; refs filtered to known labels and bib keys.
+
+**Algorithm 5.3 (equation check).** Equations with unbalanced braces fail without TeX. The rest are typeset in one `pdflatex -draftmode` run (amsmath, amssymb, bm, document macros), each preceded by `\typeout{@@animath-eq-i}`; the first `! ` line after marker $i$ is the error of equation $i$; an error before any marker is a preamble error and raises.
+
+5.6 Golden set (`tests/golden/`): sources, PDF transcription fixture, expected IR (`expected.json`). Regenerate with `ANIMATH_UPDATE_GOLDEN=1 .venv/bin/pytest tests/ingest/test_golden.py`, then review the diff.
+
+| Case | Format | Exercises |
+|---|---|---|
+| `efie` | MD + `.bib` | YAML title, labelled `$$`, raw `\eqref`, citations, theorem div, list |
+| `gmres` | LaTeX, `\input`, `.bib` | macros, `align` aliases, algorithm, named theorem, proof, lemma |
+| `gauss` | PDF + transcript | raster, replay, merge, theorem with display |
+
+5.7 Decisions.
+
+| # | Decision | Reason |
+|---|---|---|
+| I1 | pandoc pinned through `pypandoc-binary` (pandoc 3.9) rather than the system binary | identical AST across image, CI, laptops (N2) |
+| I2 | Equation check by TeX compilation only; SymPy equivalence deferred to evaluation (WP9) | catches transcription syntax errors at ingest cost $O(1)$ TeX runs per chunk |
+| I3 | PDF output normalized (Algorithm 5.2, step 5), not rejected | model output is a hint; LaTeX/MD inputs stay strict |
+| I4 | Figure image paths not kept | `Block` has no field; captions suffice for $\Phi_2$ |
+
+5.8 Performance: pandoc call ≈ 10 ms; `tests/ingest` ≈ 4 s on 4 cores.
+
 ## 6 Knowledge extraction
 ## 7 Storyboard
 ## 8 Numerics
