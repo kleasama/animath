@@ -475,7 +475,7 @@ kept if it exists and a visual is alive; at most 8, evenly subsampled. A visual 
 | `verbalize` | split prose and inline math (`$…$`, `$$…$$`, `\(…\)`); `TEX` rewrites → MathML (MathJax 3.2.1) → speech (SRE 4.1.4, ClearSpeak) → `SPEECH` rewrites (§10.6), one `node sre.cjs` call per stage run; source tokens as (written, spoken) pairs (§10.6) |
 | `written` | inline TeX → compact Unicode for captions (§10.6) |
 | `g2p` | spoken forms, espeak-ng IPA mapped to the misaki inventory, per-word alignment (Algorithm 10.2) |
-| `tts` | `TTS` protocol (`id`, `rate`, `synth(text) -> (int16 PCM, word spans)`); `Kokoro`, `Espeak`; WAV I/O |
+| `tts` | `TTS` protocol (`id`, `rate`, `wpm`, `natural(text) -> s`, `synth(text, speed) -> (int16 PCM, word spans)`); `Kokoro`, `Espeak`; WAV I/O |
 | `align` | sentence timeline: trim, fades, gaps, word and bookmark times (Algorithm 10.3) |
 | `proc` | subprocess call with typed failure |
 
@@ -489,27 +489,31 @@ kept if it exists and a visual is alive; at most 8, evenly subsampled. A visual 
 
 | Backend | Rate | Default | Status |
 |---|---|---|---|
-| `Kokoro` (SPEC Q6) | 24 kHz | voice `af_heart`, speed 0.85 | verified with the weights above |
-| `Espeak` (no `ANIMATH_KOKORO`) | 22.05 kHz | `en-us`, 140 wpm | verified; last resort |
+| `Kokoro` (SPEC Q6) | 24 kHz | voice `af_heart`, 135 wpm | verified with the weights above |
+| `Espeak` (no `ANIMATH_KOKORO`) | 22.05 kHz | `en-us`, 135 wpm | verified; last resort |
 
-Other voices of the file: `am_michael` (US), `bf_emma`, `bm_george` (GB; prefix `b` selects `en-gb` phonemes), and the rest of the Kokoro v1.0 list. The `voice` parameter selects one (§12.1). `pipeline.voice` sets the rate from `wpm`: Kokoro speed $\sigma = \text{wpm}/165$ to 3 decimals (§10.5; 135 wpm gives 0.818), espeak-ng `-s wpm`. Without `ANIMATH_KOKORO`, a Kokoro voice name (`af_heart`) falls back to espeak-ng's default voice.
+Other voices of the file: `am_michael` (US), `bf_emma`, `bm_george` (GB; prefix `b` selects `en-gb` phonemes), and the rest of the Kokoro v1.0 list. The `voice` parameter selects one (§12.1). `pipeline.voice` passes `wpm` to either backend; the speed follows from the storyboard (10.4). Without `ANIMATH_KOKORO`, a Kokoro voice name (`af_heart`) falls back to espeak-ng's default voice.
 
 10.3 Cache key. With $v$ the stage version,
-$$k = d\big(["\text{narrate}", v, d(\text{id}, \text{narration}), \text{tts.id}, \text{verbalizer.id}]\big). \tag{10.1}$$
-`tts.id` = `kokoro:` model SHA-256 prefix, voice, speed, $d$(lexicon, word list, phoneme map, vocab, voice style); `verbalizer.id` = `sre:` domain, $d$(`TEX`, `SPEECH`). Edits to visuals, math or duration of a scene do not trigger re-synthesis; edits to any pronunciation table do. `written` and the `align` constants are covered by $v$.
+$$k = d\big(["\text{narrate}", v, d(\text{id}, \text{narration}), \text{tts.id}, \text{verbalizer.id}, \bar s]\big). \tag{10.1}$$
+`tts.id` = `kokoro:` model SHA-256 prefix, voice, `wpm`, $d$(lexicon, word list, phoneme map, vocab, voice style); `verbalizer.id` = `sre:` domain, $d$(`TEX`, `SPEECH`). Edits to visuals, math or duration of a scene do not trigger re-synthesis; edits to any pronunciation table do, and edits to other scenes only when they move $\bar s$ (10.4) by a step. `written` and the `align` constants are covered by $v$.
 
-10.4 Sentences. Lines are joined until one ends in `.`, `!` or `?` (closing quotes and brackets allowed after it) or has a pause `pause_s` $> 0$; each such utterance is one `synth` call, so intonation runs across line boundaries, and carries the pause $p$ of its last line. A bookmark is the index of its line's first word within the utterance.
+10.4 Sentences and rate. Lines are joined until one ends in `.`, `!` or `?` (closing quotes and brackets allowed after it) or has a pause `pause_s` $> 0$; each such utterance is one `synth` call, so intonation runs across line boundaries, and carries the pause $p$ of its last line. A bookmark is the index of its line's first word within the utterance. The storyboard, utterances $u_1,\dots,u_K$ of $n$ spoken words in all, is synthesized at one speed
+$$\bar s = \frac{\text{wpm}}{60\,n}\sum_{k} N(u_k) \tag{10.4}$$
+rounded to 0.01, $N(u)$ = `natural(u)` the seconds from the start of the first word to the end of the last at speed 1, so all words span $60n/\text{wpm}$ s up to the rounding, whatever the voice's own pace. One speed keeps a narrator's tempo: speeds equalized per scene differed by up to 24 % between adjacent scenes of the §2.8 narration. Scene lengths follow their narration (§9.6, §11.2), so only the total has to meet the plan. Espeak's $N$ is the nominal $60n/\text{wpm}$, so its $\bar s = 1$.
 
 **Algorithm 10.1 (Kokoro synthesis).** Input: words $w_1,\dots,w_n$ of a sentence.
 1. Phonemes $p_i$ by Algorithm 10.2. Leading and trailing punctuation $o_i, c_i$ of $w_i$ stays in the token stream (`;:,.!?—…"()“”`): Kokoro renders it as pauses and intonation.
 2. Tokens $t = o_1 p_1 c_1 \sqcup \dots \sqcup o_n p_n c_n$, $\sqcup$ the space id. If $\lvert t\rvert > 510$, split recursively at the clause end nearest the middle of the token count.
-3. Run the graph on $[0, t, 0]$ with style row $S_{\text{voice}}[\lvert t\rvert - 1]$ and speed $\sigma$. The graph also outputs `/encoder/Clip_output_0`, the duration $\delta_j \ge 1$ of input token $j$ in frames of $h = 600$ samples; the audio has $h\sum_j \delta_j$ samples.
+3. The pruned graph (below) gives the unrounded frames $d_j$ of each input token of $[0, t, 0]$ at speed 1 (`/encoder/predictor/ReduceSum_output_0`); the full graph rounds them as $\delta_j(s) = \max(1, \operatorname{round}(d_j/s))$ for its speed input $s$. Many $d_j$ cluster near the same values, so for a fixed $s$ the total $\sum_j \delta_j$ jumps: one sentence gave 591, 556 and 520 frames at $s$ = 0.79, 0.80, 0.805. `fit` scans $s \in \bar s\,[0.8, 1.2]$ in steps of $10^{-3}\bar s$ for
+$$\min_s \Big\lvert \sum_j \delta_j(s) - \frac{1}{\bar s}\sum_j d_j \Big\rvert, \tag{10.5}$$
+ties to the $s$ nearest $\bar s$, which scales the sentence by exactly $1/\bar s$ up to a frame. Run the full graph on $[0, t, 0]$ with style row $S_{\text{voice}}[\lvert t\rvert - 1]$ and that $s$; it also outputs `/encoder/Clip_output_0`, the $\delta_j$ in frames of $h = 600$ samples; the audio has $h\sum_j \delta_j$ samples.
 4. With $F_j = h\sum_{k<j}\delta_k$ and $[a_i, b_i)$ the token range of $p_i$ in $t$, word $i$ spans samples
 $$\big[F_{a_i+1},\; F_{b_i+1}\big), \tag{10.2}$$
 the shift by one accounting for the leading pad token.
 5. Scale by $\frac12$ (raw peaks reach full scale), round to int16.
 
-The extra output is added by editing the serialized `ModelProto` (field 7 graph, field 12 output, `ValueInfoProto` name field 1); no `onnx` dependency.
+`with_outputs` edits the serialized `ModelProto` (field 7 graph: nodes 1 with inputs 1 and outputs 2, initializers 5 named in field 8, outputs 12 as `ValueInfoProto` name 1); no `onnx` dependency. It appends outputs, or with `prune` makes them the only outputs and keeps just their ancestor nodes (a reverse pass over the topologically sorted nodes) and the initializers those read: the predictor keeps 937 of 2464 nodes and runs in 3 % of the time of a synthesis; ONNX Runtime does not skip unneeded nodes itself. A name no node computes raises `NarrateError`.
 
 **Algorithm 10.2 (phonemes, `g2p.Phonemizer`).**
 1. Spoken core of each word, punctuation split off: lexicon entries as espeak mnemonics (*Schur* `[[S'Ur]]`, *Galerkin*, *Lanczos*, …); 2–4 capitals or hyphenated capitals spelled (*LU* → L U, *RS-S* → R S S; *BLAS*, *NASA*, *RAM*, *SIAM* read as words); the letter *A* before an operator word, a single letter or the end `[['eI]]`.
@@ -520,14 +524,18 @@ The extra output is added by editing the serialized `ModelProto` (field 7 graph,
 $p_i$ is the in-context pronunciation of $w_i$, non-empty for every pronounced word, so (10.2) gives every word a positive span.
 
 **Algorithm 10.3 (timeline, `align.timeline`).** Rate $r$; utterances $k = 1,\dots,K$ with PCM $x_k$, spans (10.2) and pauses $p_k$.
-1. Bounds $[a_k, b_k)$: first to last 10 ms frame with RMS above $-60$ dBFS, widened by 50 ms, clamped; a silent sentence raises `NarrateError`.
+1. Bounds $[a_k, b_k)$: the 10 ms frames with RMS above $-60$ dBFS together with the word span from the first word's start to the last word's end, widened by 50 ms, clamped; a silent sentence raises `NarrateError`. Kokoro lengthens a sentence's last sound by up to 0.4 s, mostly below $-60$ dBFS; the span keeps it whole, so no word end is cut, every word lies inside its bounds, and the audible pause after a sentence is up to 0.4 s longer than its gap.
 2. Raised-cosine fades of $m = 0.01r$ samples at both ends, gain $\frac12 - \frac12\cos\big(\pi (j+\frac12)/m\big)$, $j < m$.
-3. Layout: $L = 0.3$ s silence, each faded utterance followed by $G + p_k$ with $G = 0.4$ s, the last gap replaced by $\max(T, p_K)$ with $T = 0.6$ s. Offsets $o_1 = Lr$, $o_{k+1} = o_k + b_k - a_k + (G + p_k)r$.
+3. Layout by words, with $\alpha_k, \omega_k$ the start of the first word and the end of the last in $x_k$: the first word starts at $L = 0.4$ s, the first word of $k+1$ at $G + p_k$ after $\omega_k$ with $G = 0.35$ s, the planner's line gap $g$ (§7.3), and the narration ends $\max(T, p_K)$ after $\omega_K$, $T = 0.6$ s. Offsets
+$$o_1 = \max(0,\ Lr - \alpha_1 + a_1), \qquad o_{k+1} = \max\big(o_k + b_k - a_k,\ o_k + \omega_k - a_k + (G + p_k)r - \alpha_{k+1} + a_{k+1}\big),$$
+the first term only where audio would overlap.
 4. Word times $\big(o_k + \operatorname{clip}(\text{span}, a_k, b_k) - a_k\big)/r$; a bookmark is the start of its word.
 
-Duration $= L + \max(T, p_K) + \sum_{k<K} (G + p_k) + \sum_k (b_k - a_k)/r$. Silence between utterances is $G + p_k$ plus both pads, ≈ 0.5 s without a pause; within an utterance only the model's own pauses occur.
+Within an utterance only the model's own pauses occur. A sentence's audio starts 55–165 ms before its first word's frames (mean 84 ms on the narrations of 10.5), past the pad, so offsets by audio bounds would add that to every gap; offsets by words keep the gaps exact. With (10.5) the word spans are $N(u_k)/\bar s$, so a scene of utterances $k \in I$ lasts
+$$T_I = L + \frac{1}{\bar s}\sum_{k \in I} N(u_k) + \sum_{k \in I,\ k < \max I} (G + p_k) + \max(T, p_{\max I}) \tag{10.6}$$
+up to a frame per utterance. Summed over scenes the second term is $60n/\text{wpm}$ by (10.4): the total is the planner's estimate $E$ (§7.3) with spoken words (`Verbalizer.lines`) for tokens plus $L$ per scene, when every line ends an utterance and every scene's last pause is at least $T$ (the planner holds the last line at least 1 s).
 
-10.5 Accuracy. Word times are the model's token durations, exact to one frame (25 ms); bookmarks are word starts, so $Q_3$ holds by construction. Measured on the §2.8 test narration (11 scenes, 789 words, `af_heart`, speed 0.85): 140 wpm overall, 151 wpm within sentences, so wpm $\approx 165\,\sigma$ (`Kokoro.wpm_per_speed`; 0.9 gave 148); Whisper base.en (offline) transcribed 92.7 % of the words verbatim, the rest spelling variants (*colour*, numerals).
+10.5 Accuracy. Word times are the model's token durations, exact to one frame (25 ms); bookmarks are word starts, so $Q_3$ holds by construction. Whisper base.en (offline) transcribed 92.7 % of the §2.8 test narration (11 scenes, 789 words, `af_heart`) verbatim, the rest spelling variants (*colour*, numerals). Rate, before (10.4): a fixed speed $\text{wpm}/165$ gave 145 spoken wpm within sentences on that narration but 155 on a Gauss–Legendre narration with 29 formulas (277 spoken words), voices differed by 21 % at one speed (`bf_emma` 194, `bm_george` 160 words per minute per unit speed), and the rounding step of Algorithm 10.1 moved the rate by up to 12 % between neighbouring speeds. With (10.4)–(10.6) at 135 wpm, all words span 134.5–135.5 wpm on the Gauss narration (3 scenes, 12 utterances) for `af_heart`, `am_michael`, `bf_emma` and `bm_george`, and 135.1–135.8 wpm on the §2.8 narration for `af_heart` and `bm_george`, the spread being the rounding of $\bar s$; at one speed the scenes of the §2.8 narration range over 110–147 wpm. Lengths equal (10.6) with the measured spans to $10^{-5}$ and exceed the planner's estimate with spoken words plus 0.4 s per scene by −0.1 to 0.4 % (Gauss `af_heart`, `bm_george`; §2.8 `af_heart`).
 
 10.6 Math speech and captions. `TEX` rewrites before SRE: `\mathcal H^2` → H two; two-digit subscripts spaced; upright superscript words read as words. `SPEECH` rewrites after SRE turn ClearSpeak into lecture style: powers $-1$, $T$, $-T$, $*$, $H$ → inverse, transpose, inverse transpose, star, Hermitian; *raised to the k power* → to the k; fractions and *divided by* → over; *the metric of x sub 2* → the 2 norm of x; *script l* → ell; *O of* → order; font words, parentheses and *sub* dropped; *comma dot dot dot comma* → up to; *negative* → minus; *is a member of* → in.
 
@@ -541,7 +549,7 @@ Captions show what is written, speech what is said. `Verbalizer.tokens` splits e
 $$\big[\text{start}(w_{N_{j-1}+1}),\; \text{end}(w_{N_j})\big], \tag{10.3}$$
 so a caption boundary is a token boundary; tokens with no spoken word are dropped. `words` keeps the spoken words (bookmarks, $Q_3$); `captions` feeds the subtitles (§11.3).
 
-10.7 Concurrency. Scenes run on a thread pool of `workers`; formulas of all uncached scenes are verbalized in one subprocess before the pool starts; the ONNX session is shared (thread-safe `run`) with `intra_op_num_threads` fixed for determinism.
+10.7 Concurrency. The formulas of all scenes are verbalized in one subprocess; a thread pool of `workers` then runs `natural` on every utterance for (10.4), cached scenes included (3 % of a synthesis each), and the scenes missing from the store; both ONNX sessions are shared (thread-safe `run`) with `intra_op_num_threads` fixed for determinism; `natural` and `synth` keep no state.
 
 10.8 Deviations from SPEC §6.3. No forced alignment (torchaudio): the duration output gives token times directly, `forced_align` is deprecated, and torch would dominate the image.
 

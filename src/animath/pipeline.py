@@ -119,15 +119,10 @@ def voice(params: Params, env: Mapping[str, str] = os.environ) -> TTS:
 
     espeak-ng keeps its default voice for a Kokoro voice name such as `af_heart`.
     """
-    v = params.voice
+    v, wpm = params.voice, params.wpm
     if root := env.get("ANIMATH_KOKORO"):
-        speed = round(params.wpm / Kokoro.wpm_per_speed, 3)
-        return (
-            Kokoro(Path(root), speed=speed)
-            if v == "default"
-            else Kokoro(Path(root), v, speed=speed)
-        )
-    return Espeak(wpm=params.wpm) if v == "default" or "_" in v else Espeak(v, wpm=params.wpm)
+        return Kokoro(Path(root), wpm=wpm) if v == "default" else Kokoro(Path(root), v, wpm=wpm)
+    return Espeak(wpm=wpm) if v == "default" or "_" in v else Espeak(v, wpm=wpm)
 
 
 def pages(data: bytes, spec: str) -> bytes:

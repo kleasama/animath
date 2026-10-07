@@ -266,15 +266,13 @@ def test_voice(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     seen: list[tuple[tuple[object, ...], dict[str, object]]] = []
 
     class Fake:
-        wpm_per_speed = 165
-
         def __init__(self, *a: object, **k: object) -> None:
             seen.append((a, k))
 
     monkeypatch.setattr(pipeline, "Kokoro", Fake)
     pipeline.voice(P, {"ANIMATH_KOKORO": "/k"})
     pipeline.voice(P.model_copy(update={"voice": "bf_emma", "wpm": 140}), {"ANIMATH_KOKORO": "/k"})
-    assert seen == [((Path("/k"),), {"speed": 0.818}), ((Path("/k"), "bf_emma"), {"speed": 0.848})]
+    assert seen == [((Path("/k"),), {"wpm": 135}), ((Path("/k"), "bf_emma"), {"wpm": 140})]
 
 
 def test_cli(
