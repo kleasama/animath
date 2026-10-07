@@ -9,8 +9,8 @@ from animath.plan.check import build
 from animath.plan.draft import SYSTEM, Draft, Schemas, prompt, repair
 from animath.plan.select import Selection, select
 
-VERSION = "1"
-PLAN_PARAMS = {"duration_s", "audience", "focus", "language", "max_retries"}
+VERSION = "2"
+PLAN_PARAMS = {"duration_s", "wpm", "audience", "focus", "language", "max_retries"}
 __all__ = ["VERSION", "Selection", "run", "select"]
 
 
@@ -34,7 +34,7 @@ def run(
     for _ in range(params.max_retries + 1):
         d, u = llm.parse(Draft, SYSTEM, text)
         usage += u
-        board, errors = build(d, sel, params.duration_s, catalog, kernels)
+        board, errors = build(d, sel, params.duration_s, catalog, kernels, params.wpm)
         if board is not None:
             store.put(board, key)
             return board, usage

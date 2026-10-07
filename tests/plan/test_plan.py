@@ -28,7 +28,8 @@ def test_run_caches(
     assert isinstance(board, Storyboard)
     assert usage == Usage(input_tokens=7)
     task = json.loads(fake.prompts[0])
-    assert (task["words_target"], task["scenes_target"], task["seeds"]) == (50, 1, ["mom"])
+    assert (task["words_target"], task["scenes_target"], task["seeds"]) == (54, 1, ["mom"])
+    assert task["wpm"] == 135
     assert [n["id"] for n in task["nodes"]] == ["efie", "mom"]
     assert task["edges"] == [{"src": "mom", "dst": "efie", "rel": "depends_on"}]
     again = run(graph, Params(duration_s=T, fps=30, voice="x"), cat, store, Fake(), kernels)
@@ -42,13 +43,17 @@ def test_repair_then_success(
     board, usage = run(graph, Params(duration_s=T), cat, store, fake, kernels)
     assert usage == Usage(input_tokens=14)
     assert fake.prompts[1].startswith(fake.prompts[0])
-    assert "Errors:\nspoken words 60, target 50 within 10%" in fake.prompts[1]
+    assert fake.prompts[1].endswith(
+        "Errors:\nscene s2: nothing changes for 14 s from scene s2.narration[0]; add actions\n"
+        "estimated length 31 s at 135 words per minute with gaps and pauses, target 28 s within "
+        "10%: cut about 8 words"
+    )
     assert board.duration_s == T
 
 
 def test_retries_exhausted(graph: KnowledgeGraph, store: Store, cat: Cat) -> None:
     fake = Fake(bad(), bad())
-    with pytest.raises(PlanError, match=r"after 1 repairs.*spoken words 60"):
+    with pytest.raises(PlanError, match=r"after 1 repairs.*estimated length 31 s"):
         run(graph, Params(duration_s=T, max_retries=1), cat, store, fake)
     assert not fake.outs
 

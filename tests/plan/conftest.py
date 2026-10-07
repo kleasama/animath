@@ -7,10 +7,10 @@ from pydantic import BaseModel, JsonValue
 
 from animath.core.schemas import Usage
 from animath.numerics import KINDS
-from animath.plan.draft import DData, DLine, Draft, DScene, DSymbol, DVisual
+from animath.plan.draft import DAction, DData, DLine, Draft, DScene, DSymbol, DVisual
 from animath.scene import catalog
 
-T = 20.0
+T = 28.0
 
 
 class Fake:
@@ -27,8 +27,8 @@ class Fake:
         return schema.model_validate(self.outs.pop(0).model_dump()), Usage(input_tokens=7)
 
 
-def line(n: int, bookmark: str | None = None) -> DLine:
-    return DLine(text=" ".join(["word"] * n), bookmark=bookmark)
+def line(n: int, bookmark: str | None = None, *acts: DAction) -> DLine:
+    return DLine(text=" ".join(["word"] * n), bookmark=bookmark, actions=list(acts))
 
 
 def vis(primitive: str, at: str | None = None, **args: Any) -> DVisual:
@@ -36,7 +36,8 @@ def vis(primitive: str, at: str | None = None, **args: Any) -> DVisual:
 
 
 def make_draft() -> Draft:
-    """Valid for the root `graph` fixture at T = 20 s: 30 + 20 words."""
+    """Valid for the root `graph` fixture at T = 28 s: 30 + 20 words at 135 wpm, gaps, holds,
+    and an action wherever 7 s would pass without a change."""
     ref = {"data": 0, "array": "current"}
     return Draft(
         title="MoM",
@@ -44,7 +45,11 @@ def make_draft() -> Draft:
             DScene(
                 id="s1",
                 goal="state the EFIE",
-                narration=[line(10, "a"), line(10, "b"), line(10)],
+                narration=[
+                    line(10, "a"),
+                    line(10, "b"),
+                    line(10, None, DAction(visual=1, do="indicate")),
+                ],
                 visuals=[
                     vis("equation", "a", latex=r"\mathbf{Z}\mathbf{I}=\mathbf{V}", until="b"),
                     vis("plot", "b", series=[{"x": [0, 1], "y": {**ref, "part": "abs"}}]),
@@ -56,7 +61,7 @@ def make_draft() -> Draft:
             DScene(
                 id="s2",
                 goal="solve",
-                narration=[line(20)],
+                narration=[line(10), line(10, None, DAction(visual=1, do="indicate"))],
                 visuals=[
                     vis("matrix", entries=ref, region="left"),
                     vis("text", text="solve", region="right"),

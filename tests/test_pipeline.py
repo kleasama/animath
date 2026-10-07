@@ -31,7 +31,7 @@ from animath.extract.draft import Draft as XDraft
 from animath.llm import LLM, Replay
 from animath.narrate.tts import Espeak
 from animath.pipeline import Paused, Pipeline, PipelineError
-from animath.plan.draft import DData, DLine, Draft, DScene, DVisual
+from animath.plan.draft import DAction, DData, DLine, Draft, DScene, DVisual
 from tests.plan.conftest import Fake
 
 GOLDEN = Path(__file__).parent / "golden"
@@ -48,7 +48,7 @@ def words(n: int, tag: str) -> str:
 
 
 def plan_draft() -> Draft:
-    """Valid storyboard for the efie golden graph at T = 12 s: 15 + 15 words."""
+    """Valid storyboard for the efie golden graph at T = 12 s: 9 + 12 words at 135 wpm."""
     eq = json.dumps({"latex": EQ["b2"]})
     return Draft(
         title="EFIE",
@@ -56,14 +56,17 @@ def plan_draft() -> Draft:
             DScene(
                 id="s1",
                 goal="state the EFIE",
-                narration=[DLine(text=words(8, "field"), bookmark="a"), DLine(text=words(7, "on"))],
+                narration=[
+                    DLine(text=words(5, "field"), bookmark="a"),
+                    DLine(text=words(4, "on"), actions=[DAction(visual=0, do="indicate")]),
+                ],
                 visuals=[DVisual(primitive="equation", args=eq, at="a")],
                 nodes=["efie", "uniqueness"],
             ),
             DScene(
                 id="s2",
                 goal="discretize",
-                narration=[DLine(text=words(15, "moment"))],
+                narration=[DLine(text=words(12, "moment"))],
                 visuals=[DVisual(primitive="text", args='{"text": "Galerkin"}')],
                 math=[EQ["b2"]],
                 data=[DData(kind="quadrature.rule", params='{"n": 3}')],
