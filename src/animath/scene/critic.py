@@ -14,12 +14,13 @@ from animath.core.schemas import Model, Scene, SceneRender, Usage
 from animath.core.store import Store
 from animath.llm import LLM
 from animath.scene.layout import GRID, Region, cell, frame
-from animath.scene.primitives.tex import Derive, DeriveArgs
-from animath.scene.render import DRAFT_FPS, EXIT_S, FRAME_HEIGHT
+from animath.scene.primitives import Cue
+from animath.scene.render import DRAFT_FPS, FRAME_HEIGHT
 
-KEYFRAMES = 6
-ENTRY_S = 1.0
+KEYFRAMES = 8
 BLANK = 16
+STATIC_S = 8.0
+LEVEL, PIXELS = 32, 24
 SYSTEM = """You review keyframes of one scene of an educational mathematics video against its plan.
 Report only defects a viewer would notice: overlapping, clipped or illegible objects, empty
 visuals, content contradicting the goal, the narration or the mathematics. Name the visual by
@@ -44,26 +45,16 @@ def spans(scene: Scene, times: dict[str, float], duration: float) -> list[tuple[
 
 
 def keyframes(
-    scene: Scene, times: dict[str, float], duration: float, fps: int, k: int = KEYFRAMES
+    scene: Scene, draft: SceneRender, cues: list[Cue], fps: int, k: int = KEYFRAMES
 ) -> list[tuple[int, list[int]]]:
-    """Last still frame (no entry, derivation step or exit playing) between consecutive changes
-    of the visual set or derivation steps, with the visuals alive; at most k."""
-    sp = spans(scene, times, duration)
-    steps = [
-        t
-        for v, (t0, t1) in zip(scene.visuals, sp, strict=True)
-        if v.primitive == Derive.name
-        for t in Derive.times(len(DeriveArgs.model_validate(v.args).steps), t0, t1)[1:]
-    ]
-    moving = [(t, t + ENTRY_S) for t in [*steps, *(t0 for t0, _ in sp)]] + [
-        (max(t0, t1 - EXIT_S), t1)
-        for v, (t0, t1) in zip(scene.visuals, sp, strict=True)
-        if isinstance(v.args.get("until"), str)
-    ]
-    still = np.ones(round(duration * fps), dtype=bool)
-    for u, w in moving:
-        still[round(u * fps) : round(w * fps)] = False
-    cuts = sorted({0, len(still), *(round(t * fps) for t in [*steps, *(t for s in sp for t in s)])})
+    """Last still frame (no cue playing) between consecutive cue starts, with the visuals
+    alive; at most k."""
+    sp = spans(scene, draft.bookmarks, draft.duration_s)
+    end = round(draft.duration_s * fps)
+    still = np.ones(end, dtype=bool)
+    for c in cues:
+        still[round(c.t * fps) : round((c.t + c.run_time) * fps)] = False
+    cuts = sorted({0, end, *(min(end, round(c.t * fps)) for c in cues)})
     out = []
     for a, b in pairwise(cuts):
         idle = np.flatnonzero(still[a:b])
@@ -76,6 +67,39 @@ def keyframes(
     if len(out) > k:
         out = [out[round(j * (len(out) - 1) / (k - 1))] for j in range(k)]
     return out
+
+
+def static(cues: list[Cue], duration: float) -> list[tuple[float, float]]:
+    """Stretches longer than STATIC_S in which no cue plays."""
+    out, t = [], 0.0
+    for a, b in [*sorted((c.t, c.t + c.run_time) for c in cues), (duration, duration)]:
+        if a - t > STATIC_S:
+            out.append((t, a))
+        t = max(t, b)
+    return out
+
+
+def silent(path: str, cues: list[Cue], fps: int) -> list[Cue]:
+    """Labelled cues changing fewer than PIXELS pixels by more than LEVEL against the frame
+    before them; frames are streamed."""
+    want = [c for c in cues if c.what]
+    span = [(max(0, round(c.t * fps) - 1), round((c.t + c.run_time) * fps)) for c in want]
+    ref: dict[int, NDArray[np.int16]] = {}
+    seen = [0] * len(want)
+    with av.open(path) as f:
+        for n, fr in enumerate(f.decode(video=0)):
+            live = [k for k, (a, b) in enumerate(span) if a <= n <= b]
+            if not live:
+                continue
+            img = np.asarray(fr.to_ndarray(format="rgb24"), dtype=np.int16)
+            for k in live:
+                if n == span[k][0]:
+                    ref[k] = img
+                else:
+                    seen[k] = max(seen[k], int((np.abs(img - ref[k]).max(axis=2) > LEVEL).sum()))
+                if n == span[k][1]:
+                    ref.pop(k, None)
+    return [c for c, x in zip(want, seen, strict=True) if x < PIXELS]
 
 
 def frames(path: str, picks: list[int]) -> list[NDArray[np.uint8]]:
@@ -110,10 +134,21 @@ def _region(args: dict[str, Any]) -> Region:
     return r if r in GRID else "main"
 
 
-def critique(scene: Scene, draft: SceneRender, store: Store, llm: LLM) -> tuple[list[str], Usage]:
-    """Content check of entered visuals in their cells, then a VLM pass on keyframes."""
-    kf = keyframes(scene, draft.bookmarks, draft.duration_s, DRAFT_FPS)
-    imgs = frames(str(store.blob_path(draft.clip)), [n for n, _ in kf])
+def critique(
+    scene: Scene, draft: SceneRender, cues: list[Cue], store: Store, llm: LLM
+) -> tuple[list[str], Usage]:
+    """Motion checks (static stretches, cues without visible change), content check of entered
+    visuals in their cells, then a VLM pass on keyframes."""
+    clip = str(store.blob_path(draft.clip))
+    out = [
+        f"scene {scene.id}: nothing changes from {a:.1f} s to {b:.1f} s while the narration "
+        "goes on; add actions"
+        for a, b in static(cues, draft.duration_s)
+    ] + [f"{c.what}: no visible change" for c in silent(clip, cues, DRAFT_FPS)]
+    if out:
+        return out, Usage()
+    kf = keyframes(scene, draft, cues, DRAFT_FPS)
+    imgs = frames(clip, [n for n, _ in kf])
 
     def name(i: int | None) -> str:
         if i is None or not 0 <= i < len(scene.visuals):

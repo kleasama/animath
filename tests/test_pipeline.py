@@ -31,7 +31,7 @@ from animath.extract.draft import Draft as XDraft
 from animath.llm import LLM, Replay
 from animath.narrate.tts import Espeak
 from animath.pipeline import Paused, Pipeline, PipelineError
-from animath.plan.draft import DData, DLine, Draft, DScene, DVisual
+from animath.plan.draft import DAction, DData, DLine, Draft, DScene, DVisual
 from tests.plan.conftest import Fake
 
 GOLDEN = Path(__file__).parent / "golden"
@@ -48,7 +48,7 @@ def words(n: int, tag: str) -> str:
 
 
 def plan_draft() -> Draft:
-    """Valid storyboard for the efie golden graph at T = 12 s: 15 + 15 words."""
+    """Valid storyboard for the efie golden graph at T = 12 s: 9 + 12 words at 135 wpm."""
     eq = json.dumps({"latex": EQ["b2"]})
     return Draft(
         title="EFIE",
@@ -56,14 +56,17 @@ def plan_draft() -> Draft:
             DScene(
                 id="s1",
                 goal="state the EFIE",
-                narration=[DLine(text=words(8, "field"), bookmark="a"), DLine(text=words(7, "on"))],
+                narration=[
+                    DLine(text=words(5, "field"), bookmark="a"),
+                    DLine(text=words(4, "on"), actions=[DAction(visual=0, do="indicate")]),
+                ],
                 visuals=[DVisual(primitive="equation", args=eq, at="a")],
                 nodes=["efie", "uniqueness"],
             ),
             DScene(
                 id="s2",
                 goal="discretize",
-                narration=[DLine(text=words(15, "moment"))],
+                narration=[DLine(text=words(12, "moment"))],
                 visuals=[DVisual(primitive="text", args='{"text": "Galerkin"}')],
                 math=[EQ["b2"]],
                 data=[DData(kind="quadrature.rule", params='{"n": 3}')],
@@ -252,13 +255,26 @@ def test_budget_and_cost(tmp_path: Path) -> None:
         pipe.run(pipeline.bundle(GOLDEN / "efie/efie.md", p, pipe.store))
 
 
-def test_voice(tmp_path: Path) -> None:
+def test_voice(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert isinstance(pipeline.voice(P, {}), Espeak)
-    assert pipeline.voice(P.model_copy(update={"voice": "en-gb"}), {}).id.startswith(
-        "espeak-ng:en-gb"
-    )
+    for v, out in [("default", "en-us:135"), ("en-gb", "en-gb:135"), ("bf_emma", "en-us:135")]:
+        assert pipeline.voice(P.model_copy(update={"voice": v}), {}).id.startswith(
+            f"espeak-ng:{out}:"
+        )
     with pytest.raises(Exception, match="Kokoro"):
         pipeline.voice(P, {"ANIMATH_KOKORO": str(tmp_path)})
+    seen: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    class Fake:
+        wpm_per_speed = 165
+
+        def __init__(self, *a: object, **k: object) -> None:
+            seen.append((a, k))
+
+    monkeypatch.setattr(pipeline, "Kokoro", Fake)
+    pipeline.voice(P, {"ANIMATH_KOKORO": "/k"})
+    pipeline.voice(P.model_copy(update={"voice": "bf_emma", "wpm": 140}), {"ANIMATH_KOKORO": "/k"})
+    assert seen == [((Path("/k"),), {"speed": 0.818}), ((Path("/k"), "bf_emma"), {"speed": 0.848})]
 
 
 def test_cli(
@@ -270,7 +286,7 @@ def test_cli(
     pipe = Pipeline(
         s,
         Replay(store, fake_llm(), f"{s.model}:{s.effort}"),
-        lambda p: Espeak(),
+        lambda p: pipeline.voice(p, {}),
         animate=clip,
         fetch=None,
         check=None,

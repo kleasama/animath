@@ -2,18 +2,35 @@ import math
 from itertools import combinations
 from typing import Any, cast
 
+import manim
 import numpy as np
 import pytest
-from manim import ImageMobject, MathTex
+from manim import (
+    YELLOW,
+    Circle,
+    Circumscribe,
+    ImageMobject,
+    Indicate,
+    ManimColor,
+    MathTex,
+    Square,
+    VGroup,
+    Write,
+)
 from matplotlib import colormaps
 from pydantic import ValidationError
 
 from animath.core.errors import AnimateError
 from animath.core.store import Store
 from animath.scene.primitives import PRIMITIVES, ArrayRef, Context, catalog
+from animath.scene.primitives.base import DIM, VERBS, color, instant, path, verb
 from animath.scene.primitives.field import colorize
+from animath.scene.primitives.matrix import DENSE_MAX
 from animath.scene.primitives.plot import places, ticks
+from animath.scene.primitives.tex import IsoMathTex, tex_part, whole
 from tests.scene.conftest import MAIN, REQ, context, ref
+
+DENSE = DENSE_MAX + 1
 
 VIRIDIS = (np.array(colormaps["viridis"]([0.0, 1.0])[:, :3]) * 255).round()
 
@@ -35,10 +52,102 @@ def test_catalog() -> None:
         "surface",
         "trace",
         "hierarchy",
+        "code",
     }
     assert all(
-        {"region", "until"} <= set(cast(dict[str, Any], s["properties"])) for s in cat.values()
+        {"region", "until", "actions", "view"} <= set(cast(dict[str, Any], s["properties"]))
+        and "resume" not in cast(dict[str, Any], s["properties"])
+        for s in cat.values()
     )
+
+    def do(name: str) -> Any:
+        return cast(dict[str, Any], cat[name])["$defs"]["Action"]["properties"]["do"]
+
+    assert do("equation")["enum"] == list(VERBS)
+    assert do("derive")["enum"] == [*VERBS, "next"]
+    assert do("trace")["enum"] == [*VERBS, "goto"]
+    assert "enum" not in do("code")
+    assert str(cat["matrix"]["description"]).endswith("row:i, col:j, entry:i:j, brackets.")
+    assert "MathTex(" in str(cast(dict[str, Any], cat["code"])["properties"]["code"])
+
+
+def test_color() -> None:
+    assert color(None) == YELLOW
+    assert color("#FF0000") == ManimColor("#FF0000")
+    assert color("BLUE_E") == manim.BLUE_E
+    for bad in ("NOPE", "UP"):
+        with pytest.raises(AnimateError, match=f"unknown colour '{bad}'"):
+            color(bad)
+
+
+def test_path() -> None:
+    m = VGroup(Square(), VGroup(Circle(), Square()))
+    assert path(m, "1.0") is m[1][0]
+    for bad in ("2", "1.x", "0.0", ""):
+        with pytest.raises(AnimateError, match="no part"):
+            path(m, bad)
+
+
+def leaves(m: Any) -> list[float]:
+    return [float(x.get_fill_opacity()) for x in m.family_members_with_points()]
+
+
+def test_generic_verbs(store: Store) -> None:
+    sq = Square(fill_opacity=1.0)
+    orig = sq.copy()
+    a = verb("show", sq.set_opacity(0.0), orig, YELLOW)
+    assert isinstance(a, Write)
+    instant(a)
+    assert leaves(sq) == [1.0]
+    assert isinstance(verb("indicate", sq, orig, YELLOW), Indicate)
+    instant(verb("dim", sq, orig, YELLOW))
+    assert leaves(sq) == [DIM]
+    instant(verb("hide", sq, orig, YELLOW))
+    assert leaves(sq) == [0.0]
+    instant(verb("mark", sq, orig, manim.RED))
+    assert sq.get_color() == manim.RED
+    instant(verb("unmark", sq, orig, YELLOW))
+    assert (sq.get_color(), leaves(sq)) == (orig.get_color(), [1.0])
+    img = build("field", context(store, u=np.eye(2)), values=ref("u"))
+    assert isinstance(verb("indicate", img, img.copy(), YELLOW), Circumscribe)
+    instant(verb("show", img.set_opacity(0.0), img.copy(), YELLOW))
+    with pytest.raises(AnimateError, match="mark needs a vector part"):
+        verb("mark", img, img.copy(), YELLOW)
+
+
+def test_default_hooks(store: Store) -> None:
+    p = PRIMITIVES["equation"]
+    a = p.args.model_validate({"latex": "x"})
+    m = p.build(a, context(store), MAIN)
+    assert p.first(m) is m
+    assert p.last(m) is m
+    assert not p.knows(m, "next")
+    with pytest.raises(AnimateError, match="verb 'next' not implemented"):
+        p.act(m, a, "next", [])
+
+
+def test_tex_parts(store: Store) -> None:
+    assert whole(r"t \to s", 0, 1)
+    assert not whole(r"\to", 2, 3)
+    m = IsoMathTex(r"t \to t_{s}", substrings_to_isolate=["t"])
+    assert len(tex_part(m, "t")) == 2
+    assert tex_part(m, "0") is m[0]
+    p = PRIMITIVES["equation"]
+    a = p.args.model_validate(
+        {"latex": "L_{21} D + L", "actions": [{"at": "a", "do": "mark", "parts": ["L_{21}"]}]}
+    )
+    eq = p.build(a, context(store), MAIN)
+    assert len(p.part(eq, a, "L_{21}").family_members_with_points()) == 3
+    acts = [{"at": "a", "do": "mark", "parts": [s]} for s in ("2", "x", "A^T")]
+    a = p.args.model_validate({"latex": r"x^2 + \hat x + A^T", "actions": acts})
+    eq = p.build(a, context(store), MAIN)
+    assert eq.get_tex_string() == r"x^{2} + \hat{x} + A^{T}"
+    assert [len(p.part(eq, a, s)) for s in ("2", "x", "A^T")] == [1, 2, 1]
+    t = PRIMITIVES["text"]
+    ta = t.args.model_validate(
+        {"text": "a cluster $t$", "actions": [{"do": "dim", "parts": ["cluster"]}]}
+    )
+    assert len(t.part(t.build(ta, context(store), MAIN), ta, "cluster")) == 1
 
 
 def test_array_resolution(store: Store) -> None:
@@ -94,10 +203,57 @@ def test_derive_cues(store: Store) -> None:
     m = p.build(a, context(store), MAIN)
     assert len(m) == 3
     assert all(isinstance(s, MathTex) for s in m)
-    assert [c.t for c in p.cues(m, a, 1.0, 4.0)] == [1.0, 2.0, 3.0]
-    assert p.last(m) is m[-1]
+    cues = p.cues(m, a, 1.0, 4.0)
+    assert [c.t for c in cues] == [1.0, 2.0, 3.0]
+    assert [c.run_time for c in cues] == pytest.approx([1.5, 0.8, 0.8])
+    assert [c.run_time for c in p.cues(m, a, 1.0, 2.5)[1:]] == pytest.approx([0.4, 0.4])
+    assert p.first(m) is m[0]
+    assert p.last(m) is m[0]
     with pytest.raises(ValidationError):
         p.args.model_validate({"steps": ["a"]})
+
+
+def test_derive_next(store: Store) -> None:
+    p = PRIMITIVES["derive"]
+    nxt = {"at": "a", "do": "next"}
+    a = p.args.model_validate({"steps": ["a", "{{a}}+b", "c"], "actions": [nxt, nxt]})
+    m = p.build(a, context(store), MAIN)
+    assert [c.t for c in p.cues(m, a, 1.0, 4.0)] == [1.0]
+    assert p.knows(m, "next")
+    assert p.part(m, a, "1") is m[1]
+    assert type(p.act(m, a, "next", [])).__name__ == "TransformMatchingTex"
+    assert p.last(m) is m[1]
+    p.act(m, a, "next", [])
+    assert p.last(m) is m[2]
+    with pytest.raises(AnimateError, match="next after the last of 3 steps"):
+        p.act(m, a, "next", [])
+    too_many = p.args.model_validate({"steps": ["a", "b"], "actions": [nxt, nxt]})
+    with pytest.raises(AnimateError, match="2 next actions for 2 steps"):
+        p.cues(p.build(too_many, context(store), MAIN), too_many, 0.0, 1.0)
+
+
+def test_matrix_parts(store: Store) -> None:
+    p = PRIMITIVES["matrix"]
+    a = p.args.model_validate({"entries": [["a", "b"], ["c", "d"]]})
+    m = p.build(a, context(store), MAIN)
+
+    def tex(sel: str) -> list[str]:
+        return [e.get_tex_string() for e in p.part(m, a, sel)]
+
+    assert (tex("row:2"), tex("col:1"), p.part(m, a, "entry:2:1").get_tex_string()) == (
+        ["c", "d"],
+        ["a", "c"],
+        "c",
+    )
+    assert len(p.part(m, a, "brackets")) == 2
+    assert p.part(m, a, "0.1") is m[0][1]
+    for bad in ("row:0", "row:3", "col:x", "entry:1", "entry:3:1", "diag"):
+        with pytest.raises(AnimateError, match="no part"):
+            p.part(m, a, bad)
+    heat = p.args.model_validate({"entries": ref("z")})
+    img = p.build(heat, context(store, z=np.eye(DENSE)), MAIN)
+    with pytest.raises(AnimateError, match="no part 'row:1'"):
+        p.part(img, heat, "row:1")
 
 
 def test_matrix_entries(store: Store) -> None:
@@ -228,6 +384,16 @@ def test_plot_maps_data(store: Store) -> None:
     assert legend[0].get_tex_string() == "GMRES"
     lin = build("plot", ctx, series=[{"x": [0, 1], "y": [0, 2]}, {"x": [0, 1], "y": [1, 1]}])
     assert len(lin) == 3
+    p = PRIMITIVES["plot"]
+    a = p.args.model_validate(
+        {"series": [{"x": ref("x"), "y": ref("r"), "label": "G"}], "logy": True, "xlabel": "$k$"}
+    )
+    parts = [p.part(m, a, s) for s in ("axes", "labels", "series:0", "legend")]
+    assert parts == list(m)
+    b = p.args.model_validate({"series": [{"x": [0, 1], "y": [0, 2]}, {"x": [0, 1], "y": [1, 1]}]})
+    assert p.part(lin, b, "series:1") is lin[2]
+    with pytest.raises(AnimateError, match="no part 'legend'"):
+        p.part(lin, b, "legend")
 
 
 @pytest.mark.parametrize(
@@ -254,10 +420,30 @@ def test_trace(store: Store) -> None:
     assert em > 0
     assert rows[2].get_fill_opacity() == 0
     cues = p.cues(m, a, 0.0, 3.0)
-    assert [c.t for c in cues] == [0.0, 1.0, 2.0]
+    assert [(c.t, c.run_time) for c in cues] == [(0.0, 1.0), (1.0, 0.4), (2.0, 0.4)]
+    assert [c.run_time for c in p.cues(m, a, 0.0, 0.75)[1:]] == pytest.approx([0.2, 0.2])
     anim = cues[1].play()
     anim.begin()
     anim.interpolate(1.0)
     assert cursor.get_y() == pytest.approx(rows[3].get_y())
     with pytest.raises(ValidationError, match="outside"):
         p.args.model_validate({"lines": ["a"], "steps": [1]})
+
+
+def test_trace_goto(store: Store) -> None:
+    p = PRIMITIVES["trace"]
+    go = {"at": "a", "do": "goto", "parts": ["line:2"]}
+    a = p.args.model_validate(
+        {"lines": ["for k", "  w = Av", "end"], "steps": [0], "actions": [go]}
+    )
+    m = p.build(a, context(store), MAIN)
+    rows, cursor = m
+    assert [c.t for c in p.cues(m, a, 0.0, 3.0)] == [0.0]
+    assert (p.part(m, a, "cursor"), p.part(m, a, "line:1")) == (cursor, rows[1])
+    instant(p.act(m, a, "goto", ["line:2"]))
+    assert cursor.get_y() == pytest.approx(rows[2].get_y())
+    for parts in ([], ["cursor"], ["line:1", "line:2"]):
+        with pytest.raises(AnimateError, match="goto needs one part line:k"):
+            p.act(m, a, "goto", parts)
+    with pytest.raises(AnimateError, match="no part 'line:3'"):
+        p.part(m, a, "line:3")

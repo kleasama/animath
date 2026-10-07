@@ -4,8 +4,9 @@ from typing import Self
 from manim import DOWN, LEFT, RIGHT, YELLOW, Animation, Mobject, Rectangle, Text, VGroup
 from pydantic import Field, model_validator
 
+from animath.core.errors import AnimateError
 from animath.scene.layout import Box
-from animath.scene.primitives.base import Args, Context, Cue, Primitive, enter
+from animath.scene.primitives.base import Args, Context, Cue, Primitive, enter, path
 
 FONT = "DejaVu Sans Mono"
 
@@ -29,10 +30,13 @@ class TraceArgs(Args):
 
 
 class Trace(Primitive[TraceArgs]):
-    """Pseudo-code listing; a cursor visits lines `steps` uniformly over the cue interval."""
+    """Pseudo-code listing; the cursor starts at line steps[0] and visits the other steps
+    uniformly over the visual's life, unless `goto` actions move it. Parts: line:k (0-based),
+    cursor. Verb: goto with one line part."""
 
     name = "trace"
     args = TraceArgs
+    verbs = ("goto",)
 
     def build(self, a: TraceArgs, ctx: Context, cell: Box) -> Mobject:
         probe = Text("Mg", font=FONT, font_size=24)
@@ -52,7 +56,23 @@ class Trace(Primitive[TraceArgs]):
     def cues(self, m: Mobject, a: TraceArgs, t0: float, t1: float) -> list[Cue]:
         rows, cursor = m
         dt = (t1 - t0) / len(a.steps)
+        if any(x.do == "goto" for x in a.actions):
+            return [Cue(t0, 1.0, lambda: enter(m))]
         return [Cue(t0, 1.0, lambda: enter(m))] + [
-            Cue(t0 + i * dt, 0.4, partial(goto, cursor, rows[k]))
+            Cue(t0 + i * dt, min(0.4, 0.8 * dt), partial(goto, cursor, rows[k]))
             for i, k in enumerate(a.steps[1:], 1)
         ]
+
+    def part(self, m: Mobject, a: TraceArgs, sel: str) -> Mobject:
+        rows, cursor = m
+        kind, _, k = sel.partition(":")
+        if sel == "cursor":
+            return cursor
+        if kind == "line" and k.isdigit() and int(k) < len(rows):
+            return rows[int(k)]
+        return path(m, sel)
+
+    def act(self, m: Mobject, a: TraceArgs, verb: str, parts: list[str]) -> Animation:
+        if len(parts) != 1 or not parts[0].startswith("line:"):
+            raise AnimateError("goto needs one part line:k")
+        return goto(m[1], self.part(m, a, parts[0]))

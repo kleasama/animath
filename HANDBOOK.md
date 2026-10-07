@@ -52,6 +52,8 @@ A stage is skipped iff an artifact is indexed under $k_\sigma$ (SPEC Invariants 
 
 3.5 Validation rules: SPEC Invariants 4.1(3). `depends_on` acyclicity uses Kahn's algorithm, $O(|V|+|E|)$.
 
+3.6 Pacing fields. `Params.wpm` $\in [80, 220]$ (default 135) is the speech rate in words per minute: the planner budgets narration at it (§7.3) and the voice follows it. `Line.pause_s` $\in [0, 30]$ s (default 0) is silence after a narration line; a line with a pause ends its utterance. Both serialize with their defaults, so adding them changed every `SourceBundle` and `Storyboard` digest once.
+
 ## 4 LLM access
 
 4.1 `LLM` protocol: `parse(schema, system, prompt, images) -> (instance, Usage)`.
@@ -166,14 +168,14 @@ a hit returns the stored graph with zero usage. The orchestrator passes `retries
 
 ## 7 Storyboard
 
-7.1 Interface. `plan.run(graph, params, catalog, store, llm, kernels=None) -> (Storyboard, Usage)` realizes $\Phi_3$. `catalog` maps primitive names to argument JSON schemas (`scene.catalog()`), `kernels` maps data kinds to parameter JSON schemas (`{k: K.model_json_schema() for k, K in numerics.KINDS.items()}`); both are passed by the orchestrator (Rule 6.2). With $\pi_3$ = (`duration_s`, `audience`, `focus`, `language`, `max_retries`),
+7.1 Interface. `plan.run(graph, params, catalog, store, llm, kernels=None) -> (Storyboard, Usage)` realizes $\Phi_3$. `catalog` maps primitive names to argument JSON schemas (`scene.catalog()`), `kernels` maps data kinds to parameter JSON schemas (`{k: K.model_json_schema() for k, K in numerics.KINDS.items()}`); both are passed by the orchestrator (Rule 6.2). With $\pi_3$ = (`duration_s`, `wpm`, `audience`, `focus`, `language`, `max_retries`),
 $$k_{\text{plan}} = d\big([\texttt{plan}, v, d(\mathcal{K}), d([\pi_3, \text{catalog}, \text{kernels}])]\big). \tag{7.1}$$
 
 | Module | Content |
 |---|---|
 | `select` | seeds, prerequisite closure, budget, topological order (Algorithm 7.1) |
 | `draft` | LLM output schema `Draft`, system prompt, task prompt |
-| `check` | validation and conversion to `Storyboard` (Algorithm 7.2) |
+| `check` | script expansion (Algorithm 7.4), validation and conversion to `Storyboard` (Algorithm 7.2) |
 
 **Algorithm 7.1 (selection, F4).**
 1. Seeds $S$: nodes whose id or a source block equals `focus`, or whose name contains it (case-folded); no match raises `PlanError`. Without focus: key nodes, else the nodes no `depends_on` edge points to.
@@ -181,41 +183,64 @@ $$k_{\text{plan}} = d\big([\texttt{plan}, v, d(\mathcal{K}), d([\pi_3, \text{cat
 3. Budget $N = \max(|S|, \lceil T/15 \rceil)$: keep the $N$ nodes least in $(h, \text{graph order})$; seeds and every kept node's parent survive.
 4. Order by Kahn's algorithm on `depends_on` (prerequisite first), ties by graph order.
 
-7.2 Draft. The model returns `Draft`: scenes with lines, visuals (`args` a JSON string), data requests (`params` a JSON string), node ids, symbols. JSON strings keep the output schema closed for structured outputs. The prompt carries audience, $T$, scene target $\max(1, \operatorname{round}(T/30))$, word target $\operatorname{round}(rT)$, seeds, selected nodes and edges, catalog, kernels.
+7.2 Draft. The model returns `Draft`: scenes with `narration`, an optional `loop` and `after` lines, visuals (`args` a JSON string), data requests (`params` a JSON string), node ids, symbols. A line (`DLine`) carries `text`, `bookmark`, `pause` (s) and `actions` $(\texttt{visual}, \texttt{do}, \texttt{parts}, \texttt{word}, \texttt{color})$; a loop (`DLoop`) carries items `over`, first-pass `lines`, `brief` lines and `speedup` $s$ (default 2). JSON strings keep the output schema closed for structured outputs. The prompt carries audience, $T$, `wpm`, scene target $\max(1, \operatorname{round}(T/40))$, word target $\operatorname{round}(0.85\,\rho T)$ with $\rho$ = `wpm`/60, seeds, selected nodes and edges, catalog, kernels.
 
-7.3 Spoken length. With $r = 2.5$ words/s and $w(\ell)$ the number of TeX control words and alphanumeric runs of line $\ell$, scene $i$ has $w_i = \max(1, \sum_{\ell} w(\ell))$, $W = \sum_i w_i$. The draft is admissible only if
-$$\lvert W/r - T \rvert \le 0.1\,T, \tag{7.2}$$
-and scene durations are word-proportional,
-$$d_i = T\,w_i / W, \qquad \textstyle\sum_i d_i = T, \tag{7.3}$$
-rounded to 1 ms. Since run time follows speech (§9.6, §11.2), (7.2) bounds $Q_6$ up to the speech-rate estimate.
+7.3 Pacing. A token is a TeX control word or an alphanumeric run; tokens in inline math weigh 1.5. With $w(\ell)$ the weighted tokens of line $\ell$, its speech lasts $s_\ell = w(\ell)/\rho$ and its slot is
+$$\sigma_\ell = s_\ell + p_\ell + g\,[\ell \text{ not last}], \qquad g = 0.35\ \text{s}, \tag{7.2}$$
+with pause $p_\ell$; a line on which a visual enters, and the last line, hold $p_\ell \ge 1$ s. Scene $i$ is estimated at $E_i = \sum_\ell \sigma_\ell$, $E = \sum_i E_i$. The draft is admissible only if
+$$\lvert E - T \rvert \le 0.1\,T, \tag{7.3}$$
+and scene durations follow the estimate,
+$$d_i = T\,E_i / E, \qquad \textstyle\sum_i d_i = T, \tag{7.4}$$
+rounded to 1 ms. The narration speaks at `wpm` with the same gaps and pauses, so (7.3) bounds $Q_6$ up to the token estimate. Line onsets $o_\ell = \sum_{k<\ell} \sigma_k$; a `word` at plain-word position $j$ of $n$ fires at $o_\ell + s_\ell j/n$. Its action carries `frac` $= s_\ell j/(n\,\sigma_\ell)$ (at most 0.99), so without a narration time for the word the renderer fires it at the same fraction of the spoken slot (§9.6).
+
+**Algorithm 7.4 (script).**
+1. Lines of `narration`, then the loop's `lines` with `{}` replaced by the first item (text and parts), then one line per `brief` entry, then `after`. Lines without a bookmark get `#k`, $k$ the line index. Each action becomes `Action{at: bookmark, word, do, parts, color}` of its visual.
+2. Holds as in §7.3.
+3. Later passes $q = 1, \dots, |\texttt{over}|-1$ replay the first pass's $n$ actions. With $D_1$ the first pass's slot sum and $\tau_j$ the onset of action $j$ within it,
+$$D_q = \max\big(D_1 s^{-q},\; n \cdot 1\ \text{s}\big). \tag{7.5}$$
+Brief lines map one to one onto passes (`{}` replaced by the item), or one brief line carries all passes back to back. A brief line's pause grows until its slot $\sigma_b \ge \sum D_q$ of its passes; action $j$ of pass $q$, at offset $O_q$ within that slot, becomes `Action{at: b, frac: (O_q + \tau_j D_q/D_1)/\sigma_b, rate: D_1/D_q}` with `{}` replaced by item $q$.
+
+7.4 Views. A visual whose args name a `view` continues the last visual of that view, in its own or an earlier scene; the primitive must match. It takes the old args (without `persist`, `until`, `replaces`, `enter`), `resume: true`, and the old actions (without `indicate`) as initial state (`at: null`), then its own actions, `until` and `replaces`; other args that differ from the old ones are an error. If the old visual is on screen at the end of the previous scene (no `until`) and the new one has no `at`, the new one gets `enter: none` and the old one `persist: true`, so the cut is seamless. Otherwise the view enters again with its state, for example morphing back by `replaces` from a zoom that held its region.
 
 **Algorithm 7.2 (validation).** Errors are collected, not raised:
 
 | Check | Rule |
 |---|---|
-| primitive | name in catalog; `args` a JSON object valid against its schema (JSON Schema 2020-12) |
+| primitive | name in catalog; `args` a JSON object valid against its schema (JSON Schema 2020-12); continued views skip this check |
 | arrays | every `{"data", "array"}` object names an existing data request; `part` set outside `matrix` |
 | data | `params` a JSON object; if kernels given, kind known and params valid |
 | cues | `at` names a bookmark (`Scene` validator); `until` names a later bookmark |
+| actions | visual index exists; action valid against the primitive's `Action` schema (verbs, colour); `word` a plain word of the line, outside math; line within the visual's lifetime |
+| morphs | `replaces` names an earlier visual whose `until` equals this `at` |
 | regions | lifetimes $[\iota(\texttt{at}), \iota(\texttt{until}))$ in line indices, defaults $0$ and $m$; overlapping lifetimes need disjoint regions (`main` meets `left`, `right`) |
+| motion | estimated changes (entries, exits, actions at their onsets) at most 7 s apart, from 0 to $E_i$ |
+| loop | at least two items and one line; $s \ge 1$; one brief line per later item, or one without `{}` |
+| lines | bookmarks do not start with `#` (kept for unnamed lines); pauses, computed ones included, in $[0, 30]$ s |
+| views | `view` and `until` are strings; a continued view keeps its args (§7.4) |
 | scene | at least one visual; nodes within the selection; `Scene` validators |
-| board | (7.2); seed coverage $\ge 0.9$ ($Q_5$); unique scene ids |
+| board | (7.3); seed coverage $\ge 0.9$ ($Q_5$); unique scene ids |
 
-7.4 Symbol ledger. `Storyboard.symbols` = draft symbols, overridden by selected symbol nodes (`latex` $\mapsto$ `meaning`, else `name`).
+7.5 Symbol ledger. `Storyboard.symbols` = draft symbols, overridden by selected symbol nodes (`latex` $\mapsto$ `meaning`, else `name`).
 
 **Algorithm 7.3 (plan).** Key hit $\Rightarrow$ return. Else select; for at most $N_{\text{retry}}+1$ attempts: parse `Draft`, validate; on success store and return; else append the previous draft and its errors to the base prompt. Exhaustion raises `PlanError` with the last errors. Usage is summed over attempts.
 
-7.5 Decisions.
+7.6 Decisions.
 
 | # | Decision | Reason |
 |---|---|---|
 | P1 | Selection deterministic, LLM only for scenes and prose | reproducible F4, smaller prompt |
-| P2 | Durations from words (7.3), not from the model | $\sum d_i = T$ exactly; consistent with narration-driven timing |
+| P2 | Durations from estimated speech, gaps and pauses (7.4), not from the model | $\sum d_i = T$ exactly; consistent with narration-driven timing |
 | P3 | `part` required on every non-matrix array ref | real/complex is unknown before $\Phi_4$; `real` on real data is the identity |
 | P4 | Region conflicts checked at plan time | cheap pre-check of §9.5, saves renders and repairs |
 | P5 | `jsonschema` validates against the catalog | catalog is JSON Schema; no import of `scene` |
+| P6 | 135 wpm speech with 0.35 s gaps and 1 s holds | user feedback: slower pace; the tester's 1.9 words/s overall |
+| P7 | Actions on lines, expanded into `Args.actions` | the model writes motion where it speaks; renders need no plan knowledge |
+| P8 | Loop passes computed, not written by the model | exact speed-up and readable floor (7.5); one brief line suffices |
+| P9 | Motion check at 7 s on estimates, 8 s on renders (§9.12) | catch static stretches before rendering; the render check has the real timing |
+| P10 | A view continues its last visual even after a gap, re-entering with the replayed state | a view gives way to a zoom and returns unchanged |
+| P11 | Word actions also carry their estimated fraction of the slot | without word times the action still fires near its word, not at the line start |
 
-7.6 Performance: `tests/plan` ≈ 5 s on 4 cores (dominated by importing `scene` for the real catalog).
+7.7 Performance: `tests/plan` ≈ 5 s on 4 cores (dominated by importing `scene` for the real catalog).
 ## 8 Numerics
 
 8.1 Interface. `numerics.compute(request, store) -> DataSet` realizes $\Phi_4$. `request.kind` selects a `Kernel` (frozen Pydantic parameters with bounds, `run() -> (arrays, meta)`, pure); invalid kinds or parameters, `LinAlgError`, and non-finite arrays raise `ComputeError`. `numerics.load(ds, store)` returns the arrays.
@@ -301,21 +326,35 @@ Implementation: GEMMs go through SciPy's BLAS (`get_blas_funcs`), since the NumP
 
 Algorithm 9.1 Scene generation: SPEC Algorithm 6.1.
 
-9.1 Modules. `scene.layout` (geometry, no Manim), `scene.primitives` (registry `PRIMITIVES`, `catalog()` of argument JSON schemas), `scene.render` (`timeline`, `compose`, `schedule`, `render`).
+9.1 Modules. `scene.layout` (geometry, no Manim), `scene.primitives` (registry `PRIMITIVES`, `catalog()` of argument JSON schemas described by the primitives' docstrings), `scene.render` (`timeline`, `compose`, `schedule`, `shoot`, `render`).
 
-9.2 Primitives. A `Visual` names a primitive and carries its arguments; every argument model extends `Args` with `region` (default `main`) and `until` (bookmark that removes the visual). Numerical arguments are literals or `ArrayRef` $(i, a)$: array $a$ of the `DataSet` answering `scene.data[i]`, stored as one `.npy` blob and loaded with `allow_pickle=False`. Complex arrays must select `part` $\in$ {`abs`, `real`, `imag`} wherever a real array is drawn (`plot`, `field`, `surface`); `matrix` takes complex input directly.
+9.2 Primitives. A `Visual` names a primitive and carries its arguments; every argument model extends `Args`:
 
-| Primitive | Arguments | Visual | Cues |
-|---|---|---|---|
-| `text` | `text` (LaTeX text mode) | `Tex` | write |
-| `equation` | `latex` | `MathTex` | write |
-| `derive` | `steps` ($\ge 2$; `{{...}}` marks matched parts) | `MathTex` chain | write, then `TransformMatchingTex` at $t_0 + k(t_1-t_0)/n$ |
-| `matrix` | `entries` (strings or `ArrayRef`) | entries if $\max(m,n) \le 8$, centred on a grid whose pitch clears the largest entry by 0.4; else heatmap of $\log_{10}\lvert a_{ij}\rvert$ | write or fade in |
-| `plot` | `series` ($\le 5$; `x`, `y`, `label`), `xlabel`, `ylabel`, `logy` | `Axes`, line graphs, legend | write |
-| `field` | `values` $u_{ij}$ at $(x_j, y_i)$, $y$ upward | viridis heatmap | fade in |
-| `surface` | `points` $(n,3)$, `faces` $(m,3)$, `scalars` $(n)$ or $(m)$, `azimuth`, `elevation` | PyVista offscreen image | fade in |
-| `trace` | `lines` (plain text, not TeX), `steps` (line indices) | monospace listing, cursor | write, then cursor to line `steps[i]` at $t_0 + i(t_1-t_0)/n$ |
-| `hierarchy` | `data`, `level`, `done`, `coloured`, `views` ⊆ {`plate`, `operator`}, `steps` (`do`, `part`) | cluster boxes; block operator in tree order (§9.15) | fade in, then step $i$ at $t_0 + (i+1)(t_1-t_0)/(n+1)$ |
+| Field | Meaning |
+|---|---|
+| `region` | grid cell (§9.3), default `main` |
+| `until` | bookmark that removes the visual |
+| `enter` | `auto` (write or fade in), `fade`, `none` (on screen at once) |
+| `replaces` | index $k$ of an earlier visual whose `until` is this `at`; this visual morphs out of it |
+| `view`, `persist` | persistent view (§7.4); `persist` suppresses the exit at the scene end |
+| `actions` | timed changes of parts (§9.6) |
+
+Numerical arguments are literals or `ArrayRef` $(i, a)$: array $a$ of the `DataSet` answering `scene.data[i]`, stored as one `.npy` blob and loaded with `allow_pickle=False`. Complex arrays must select `part` $\in$ {`abs`, `real`, `imag`} wherever a real array is drawn (`plot`, `field`, `surface`); `matrix` takes complex input directly.
+
+| Primitive | Arguments | Visual | Parts | Own verbs |
+|---|---|---|---|---|
+| `text` | `text` (LaTeX text mode) | `Tex` | TeX substrings | |
+| `equation` | `latex` | `MathTex` | TeX substrings, e.g. `L_{21}` | |
+| `derive` | `steps` ($\ge 2$; `{{...}}` marks matched parts) | `MathTex` chain; `TransformMatchingTex` at $t_e + k(t_x-t_e)/n$ unless `next` actions advance it | index paths | `next` |
+| `matrix` | `entries` (strings or `ArrayRef`) | entries if $\max(m,n) \le 8$, centred on a grid whose pitch clears the largest entry by 0.4; else heatmap of $\log_{10}\lvert a_{ij}\rvert$ | `row:i`, `col:j`, `entry:i:j` (1-based), `brackets` | |
+| `plot` | `series` ($\le 5$; `x`, `y`, `label`), `xlabel`, `ylabel`, `logy` | `Axes`, line graphs, legend | `axes`, `labels`, `series:k`, `legend` | |
+| `field` | `values` $u_{ij}$ at $(x_j, y_i)$, $y$ upward | viridis heatmap | | |
+| `surface` | `points` $(n,3)$, `faces` $(m,3)$, `scalars` $(n)$ or $(m)$, `azimuth`, `elevation` | PyVista offscreen image | | |
+| `trace` | `lines` (plain text, not TeX), `steps` (line indices) | monospace listing, cursor at `steps[0]`; visits the others uniformly unless `goto` actions move it | `line:k` (0-based), `cursor` | `goto` |
+| `hierarchy` | `data`, `level`, `done`, `coloured`, `views` ⊆ {`plate`, `operator`}, `steps` (`do`, `part`) | cluster boxes, block operator in tree order (§9.15); step $i$ at $t_e + (i+1)(t_x-t_e)/(n+1)$ | | |
+| `code` | `code` (§9.10) | generated | index paths | the snippet's `act` |
+
+Every primitive also accepts dotted index paths (`1.0`) as parts. A TeX part isolates every occurrence of the substring that cuts no control word (`t` is not isolated inside `\to`). Undelimited arguments of `^`, `_` and accent or font macros are braced first (`x^2` to `x^{2}`, `\hat x` to `\hat{x}`), since an isolation marker before such an argument breaks the TeX; cuts inside braces are safe.
 
 9.3 Semantic grid. For frame $F = [-W/2, W/2] \times [-H/2, H/2]$, $H = 8$, $W = 8w/h$, a region with normalized box $(u_0, v_0, u_1, v_1)$ occupies
 $$C = [-W/2 + u_0 W,\; -W/2 + u_1 W] \times [-H/2 + v_0 H,\; -H/2 + v_1 H]. \tag{9.1}$$
@@ -336,57 +375,69 @@ and centred in $C$. Raster primitives are built at cell height.
 
 9.5 Layout check. A placement is $p = (B_p, [t_0, t_1), s_p)$ with $B_p$ the measured bounding box. The layout is rejected (`AnimateError`) iff for some $p$: $B_p \not\subseteq F$, or $s_p < s_{\min} = 0.4$; or for some $p \ne q$:
 $$[t_0^p, t_1^p) \cap [t_0^q, t_1^q) \ne \emptyset \;\wedge\; \lvert B_p \cap B_q \rvert > 0. \tag{9.3}$$
-Placements are static between cues and exits end at $t_1$, so (9.3) at keyframes covers every interpolated frame.
+Actions change parts in place, so the box measured at build bounds the visual unless an action moves a part out of it.
 
-9.6 Timeline. With narration, bookmark times $\tau_b$ and duration $T$ are taken from `Narration` (every scene bookmark must be present). Without, line $i$ of $n$ starts at
-$$\tau_i = iT/n, \quad T = \texttt{duration\_s}. \tag{9.4}$$
-A visual lives on $[t_0, t_1)$ with $t_0 = \tau_{\texttt{at}}$ (else 0) and $t_1 = \tau_{\texttt{until}}$ (else $T$); its exit fades over $[\max(t_0, t_1 - 0.5), t_1)$.
+9.6 Timeline and cues. With narration, bookmark times $\tau_b$, word onsets and duration $T$ are taken from `Narration` (every scene bookmark must be present). Without, line slots are proportional to speech at `wpm` (whitespace words), gaps $g = 0.35$ s and pauses, scaled to $T$ = `duration_s`; words are spread uniformly over their line's speech. A visual lives on $[t_0, t_1)$ with $t_0 = \tau_{\texttt{at}}$ (else 0) and $t_1 = \tau_{\texttt{until}}$ (else $T$). Its cues:
 
-**Algorithm 9.2 (schedule).** Input cues $(t_k, r_k)$, frame rate $f$.
-1. $n_k = \operatorname{round}(t_k f)$; drop cues with $n_k \ge \operatorname{round}(Tf)$.
-2. Group cues by $n_k$; let $n^{(1)} < \dots < n^{(g)}$, $n^{(g+1)} = \operatorname{round}(Tf)$.
-3. Group $j$ plays from $n^{(j)}/f$ for $\max\big(1, \min(\operatorname{round}(f \max_k r_k),\, n^{(j+1)} - n^{(j)})\big)/f$.
-4. Waits fill gaps to the next absolute frame.
+| Cue | Start | Run time |
+|---|---|---|
+| entry | $t_0$ | 1.5 s (`Write` or `FadeIn`); 1.2 s morph from visual $k$ (`TransformMatchingTex` between formulas, else `ReplacementTransform`) when `replaces`; 0 when `enter: none` |
+| action | $\min\big(\max(t_e, t_a),\; t_x - r\big)$, but not before $t_e$ | $r = \min\big(\max(0.25,\ 1/\texttt{rate}),\ t_x - t_e\big)$ s, so it ends by $t_x$; an error if $r < 0.25$ |
+| own | spread by the primitive over $[t_e, t_x)$; an error if $t_e \ge t_x$ | ends by $t_x$: `derive` steps $\min(1,\ 0.8\,s)$, `trace` moves $\min(0.4,\ 0.8\,s)$ for slot $s$ |
+| exit | $t_x = \max(t_0, t_1 - 0.6)$ | 0.6 s `FadeOut`; none if replaced, or if `persist` without `until` ($t_x = t_1$) |
 
-Every cue starts on its own frame, so $Q_3 \le 1/(2f)$, and the clip has exactly $\operatorname{round}(Tf)$ frames.
+Here $t_e$ is the end of the entry and $t_a$ the action time: the onset of `word` (case and punctuation ignored) within the slot $[\tau_{\texttt{at}}, \tau_{\text{next}})$ of its bookmark, else $\tau_{\texttt{at}} + \texttt{frac}\,(\tau_{\text{next}} - \tau_{\texttt{at}})$. An action with `at: null` is initial state, applied without frames at build, primitive verbs included (`next` starts a derive at a later step). A visual with `resume`, set by the planner on continued views (§7.4) and absent from the catalog, starts where the view left off: the own animations of its initial state are applied at build too (a derive without `next` shows its last step), and it has no others. Generic verbs on parts: `show` (parts hidden at build, then written, or faded in if not vector), `hide`, `dim` (opacity 0.2), `indicate` (`Indicate`, or `Circumscribe` if not vector), `mark` (colour, default yellow), `unmark` (restore the built style). Verbs change mobjects in place; the end state of each is the start of the next.
 
-9.7 Rendering. `render(scene, params, store, narration, datasets, draft)` sets Manim's configuration inside `tempconfig`, renders into a temporary directory removed on exit, stores the silent H.264 clip as a blob, and returns `SceneRender` with `checks = {layout, render}`. Draft: 240 px height, 15 fps. Output is byte-identical across runs. Manim's global configuration and VTK make `render` thread-unsafe; parallelize over processes.
+**Algorithm 9.2 (schedule).** Input cues $(t_k, r_k)$, frame rate $f$, $N = \operatorname{round}(Tf)$.
+1. $a_k = \operatorname{round}(t_k f)$; drop cues with $a_k \ge N$; $n_k = \min(\operatorname{round}(r_k f), N - a_k)$.
+2. In order of $(a_k, k)$, a cue joins the current cluster if $a_k$ lies before its end, else opens a new one; a cluster ends at $\max_k (a_k + \max(n_k, 1))$.
+3. Each cluster is one `play` of its cues, each wrapped in `Delayed`: set up lazily at frame $a_k$, interpolated over its own $n_k$ frames, finished and cleaned up at $a_k + n_k$; waits fill the gaps.
+
+Overlapping cues keep their own run times, every cue starts on its own frame ($Q_3 \le 1/(2f)$), and the clip has exactly $N$ frames. Objects an action adds to the scene join its visual, so they leave with it.
+
+9.7 Rendering. `shoot(scene, params, store, narration, datasets, draft)` sets Manim's configuration inside `tempconfig`, renders into a temporary directory removed on exit, stores the silent H.264 clip as a blob, and returns `SceneRender` with `checks = {layout, render}` and the cues played; `render` returns the `SceneRender` only. Draft: 240 px height, 15 fps. Output is byte-identical across runs: x264 runs without MB-tree (`Writer`), whose AVX-512 code reads uninitialized memory and so made clips depend on the process's heap. Manim's global configuration and VTK make rendering thread-unsafe; parallelize over processes.
 
 9.8 Implementation notes.
 1. `manim.Scene.play` overwrites `self.duration`; the clip end time is kept in `Clip.t_end`.
 2. PyVista renders through OSMesa (`VTK_DEFAULT_OPENGL_WINDOW=vtkOSOpenGLRenderWindow`, set if absent); requires `libosmesa6`.
-3. Build failures (e.g. LaTeX errors) are re-raised as `AnimateError` naming `scene.visual:primitive`, for the WP8 repair loop.
+3. Build failures (e.g. LaTeX errors) are re-raised as `AnimateError` naming `scene.visual:primitive`, for the repair loop; a cue failing while it plays names its action.
 4. Tests run Manim under `tempconfig` with a temporary `media_dir`; nothing is written to the working tree.
+5. `Scene.play` begins every animation at its start; `Delayed` defers `begin` to its own frame, because `.animate` targets, `last()` of a derivation and morph sources depend on the state at that moment.
+6. `TransformMatchingTex` replaces its source by its target in the scene; `derive` tracks the step shown, and entries, exits and morphs read it when they play.
+7. Cairo `Scene.remove` of a part splits its visual into the remaining parts at the top level. `Clip.remove` also drops those parts when the visual leaves, and `Clip.replace` removes and adds when a morph source was split. A `play` in which nothing on screen moves redraws every frame: Manim would draw the entering mobject over a cached frame and so draw translucent mobjects (`dim`) twice.
 
-9.9 Scene generation (WP8). `scene.animate(scene, data, narration, store, llm, params) -> (SceneRender, Usage)` realizes $\Phi_5$; `data` maps request digests to `DataSet`; `Usage` sums every LLM call of the invocation (codegen, repair, critic) and is zero on a key hit. With $\pi_5$ = (`width`, `height`, `fps`, `max_retries`) and $D_s = [d(\text{DataSet of } r) \text{ or null} : r \in \texttt{scene.data}]$,
+9.9 Scene generation (WP8). `scene.animate(scene, data, narration, store, llm, params) -> (SceneRender, Usage)` realizes $\Phi_5$; `data` maps request digests to `DataSet`; `Usage` sums every LLM call of the invocation (codegen, repair, critic) and is zero on a key hit. With $\pi_5$ = (`width`, `height`, `fps`, `wpm`, `max_retries`) and $D_s = [d(\text{DataSet of } r) \text{ or null} : r \in \texttt{scene.data}]$,
 $$k_{\text{animate}} = d\big([\texttt{animate}, v, d(s), d([D_s, d(\text{Narration}) \text{ or null}, \pi_5])]\big). \tag{9.5}$$
 
 | Module | Content |
 |---|---|
-| `codegen` | static gate, `code` primitive, pinned API |
+| `primitives.code` | static gate, `code` primitive, pinned API |
 | `repair` | localized LLM patch, pitfall memory |
-| `critic` | keyframes, cell content check, VLM verdict |
+| `critic` | keyframes, motion checks, cell content check, VLM verdict |
 | `animate` | Algorithm 9.3, stage key |
 
-**Algorithm 9.3 (animate).** Key hit $\Rightarrow$ return. Else, with `code` registered:
+**Algorithm 9.3 (animate).** Key hit $\Rightarrow$ return. Else:
 1. $E$ ← visuals whose primitive is not in `PRIMITIVES` (codegen requests).
 2. For at most $N_{\text{retry}}+1$ rounds: if $E \ne \emptyset$, patch $s$ by `repair` (a rejected patch leaves $s$ unchanged, appends its error to $E$ and ends the round); $E$ ← first non-empty of: static gate of every `code` visual; draft render (`AnimateError`); critic. If $E = \emptyset$: final render, store under (9.5), return. Else record $E$ in pitfall memory.
 3. Exhaustion raises `AnimateError` with the last $E$.
 
 Hence at most $N_{\text{retry}}$ repairs follow the first check; codegen is the repair of round 1.
 
-9.10 `code` primitive. Arguments `code`, `region`, `until`. The snippet is exactly `def build(array)` returning one `Mobject`; `array(i, name, part=None)` is `Context.real` on `ArrayRef(i, name, part)`. It enters by `Write`/`FadeIn` and is fitted by (9.2) like any primitive. The gate admits names from a whitelist (32 mobject classes, direction and colour constants, 14 builtins), `np.f` for 29 NumPy functions only, and rejects imports, `while`, `try`, `with`, `raise`, `global`, class definitions, and attributes with prefixes `_`, `f_`, `gi_`, `co_`, `cr_`, `ag_`, `tb_` or names `format`, `save`, `tofile`, `dump`. Execution uses a namespace of exactly these symbols. Runtime errors report the snippet line. The gate filters model errors; it is not a security boundary.
+9.10 `code` primitive. Argument `code`, plus those of `Args`. The snippet defines `def build(array)` returning one `Mobject`, and optionally `def act(m, verb, parts)` returning an animation (or `.animate` builder) for its own verbs, with `parts` the selected submobjects; `array(i, name, part=None)` is `Context.real` on `ArrayRef(i, name, part)`. It enters by `Write`/`FadeIn` and is fitted by (9.2) like any primitive. The gate admits names from a whitelist (32 mobject classes, 11 animations, direction and colour constants, 14 builtins), `np.f` for 29 NumPy functions only, and rejects imports, `while`, `try`, `with`, `raise`, `global`, class definitions, other top-level statements, and attributes with prefixes `_`, `f_`, `gi_`, `co_`, `cr_`, `ag_`, `tb_` or names `format`, `save`, `tofile`, `dump`. Execution uses a namespace of exactly these symbols. Errors report the snippet line. The gate filters model errors; it is not a security boundary. The argument's description carries the pinned API (constructor parameters, at most 8 per class), so planner and repair see it through the catalog.
 
-9.11 Localization. Every error names visual $i$ of scene $s$ as `s.i:primitive` (render, gate and critic alike). `repair` may replace only the visuals named in $E$ (block level; snippet line numbers give line level), else all visuals (scene level). The model returns `Patch` = [(index, primitive, args as JSON string, at)]; a patch outside the allowed indices, with non-object `args`, or yielding an invalid `Scene` is rejected. The prompt carries goal, narration, math, data requests, indexed visuals, $E$, allowed indices and pitfalls; the system prompt carries the catalog (with `code`), region sizes and the pinned API (constructor parameters, at most 8 per class), so it is cached. Patches are memoized in namespace `repair` under $H(\text{system}, s, E)$: pitfalls are advisory and change between runs, so they stay out of the key and a resumed run replays its repairs.
+9.11 Localization. Every error names visual $i$ of scene $s$ as `s.i:primitive` (render, gate and critic alike). `repair` may replace only the visuals named in $E$ (block level; snippet line numbers give line level), else all visuals (scene level). The model returns `Patch` = [(index, primitive, args as JSON string, at)]; a patch outside the allowed indices, with non-object `args`, or yielding an invalid `Scene` is rejected. The prompt carries goal, narration, math, data requests, indexed visuals, $E$, allowed indices and pitfalls; the system prompt carries the catalog and region sizes, so it is cached. Patches are memoized in namespace `repair` under $H(\text{system}, s, E)$: pitfalls are advisory and change between runs, so they stay out of the key and a resumed run replays its repairs.
 
-9.12 Critic. Moving frames are those within 1 s after an entry or a `derive` step ($t_0 + k(t_1-t_0)/n$, $k \ge 1$) and within 0.5 s before an exit. Keyframes: for consecutive change frames $a < b$ of the visual set or of a `derive` step,
-$$n = \max\{\, m \in [a, b) : m \text{ not moving} \,\}, \tag{9.6}$$
-kept if it exists and a visual is alive; at most 6, evenly subsampled. A transient state with no still frame is skipped. A visual alive at $n$ fails if its grid cell has no pixel above 16 (of 255). Only if no visual fails, the model receives the keyframes as PNG with the plan and returns `Verdict` (issues with optional visual index).
+9.12 Critic. Three checks, in order; the first non-empty one is returned.
+1. Motion. A stretch longer than 8 s in which no cue plays fails the scene. A labelled (action) cue fails if fewer than 24 pixels of any frame it plays change by more than 32 (of 255) in some channel against the frame before it; frames are streamed from the clip.
+2. Content. Keyframes: for consecutive cue starts $a < b$,
+$$n = \max\{\, m \in [a, b) : \text{no cue plays at } m \,\}, \tag{9.6}$$
+kept if it exists and a visual is alive; at most 8, evenly subsampled. A visual alive at $n$ fails if its grid cell has no pixel above 16.
+3. Only then the model receives the keyframes as PNG with the plan and returns `Verdict` (issues with optional visual index).
 
 9.13 Pitfall memory. Index namespace `pitfall`, key $H(\text{primitive})$ (`scene` for unlocalized errors), value a blob with the last 8 distinct messages (300 characters each). Read-modify-write is last-writer-wins across processes; a lost entry only weakens a hint.
 
 9.14 Notes.
-1. `animate` registers `code` in `PRIMITIVES` for its duration; with the renderer this makes it thread-unsafe: parallelize scenes over processes (WP9). `scene.catalog()` stays free of `code`, so the planner never emits it.
+1. `code` is a catalog primitive: the planner may emit it for diagrams outside the catalog, and its own verbs (`act`) give it the same steps interface as the library.
 2. LaTeX precompile is the build phase of the draft render: `compose` builds every mobject before any frame, and build errors are localized.
 3. Unit tests use a queued fake LLM (`tests/scene/fake.py`); no network.
 
@@ -404,6 +455,16 @@ kept if it exists and a visual is alive; at most 6, evenly subsampled. A transie
 
 `advance` maps (state, step) to the next state and its flashes, and rejects a part kind the verb does not take (`TAKES`: cluster parts by default; `colour` cluster or class; `wave` class; `drop` block; `coarsen` and `top` none). `draw` maps a state to keyed specs. The `Board` holds the current state; `go(steps)` advances it and returns one `AnimationGroup` of one `Transform` per changed key, whose group is the board itself, already in the scene, so `Scene.add` leaves it whole. A vanishing near or fill block morphs into its parent's fill or near block (else the dense top), a box into its parent box; anything else fades; flashes run there and back. Items are created invisible on first use and removed at the next transition; an invisible anchor recovers the fit (9.2). `steps` are cues at $t_0 + (i+1)(t_1-t_0)/(n+1)$, and steps closer than 0.1 s raise `AnimateError`; actions call `go` when they play. Steps and actions thus advance one state in play order, and a continued view replays its actions at build; a resumed view replays its steps before its actions, so a visual takes one or the other. Selectors resolve when the verb plays, against the current level. For the generic verbs, `part` returns a group of the items a selector names (the boxes of its clusters on the plate, else their diagonal blocks; the block), a child of the board refilled after every transition, so a part follows the walk across levels.
 
+9.16 Decisions.
+
+| # | Decision | Reason |
+|---|---|---|
+| S1 | Motion as actions on named parts, fired at bookmarks or spoken words | the user asked for progressive, explanatory graphics; one interface for library, `code` and the hierarchy primitive |
+| S2 | Lazy cue set-up (`Delayed`) and overlap clusters instead of one `play` per cue time | overlapping cues keep their run times; state-dependent animations see the current state |
+| S3 | Actions clamped between entry and exit | a word spoken during the entry still fires; no action runs into a fade-out |
+| S4 | Persistent views by `persist` and `enter: none`, replaying state | scene changes cross-fade only what changes; clips stay independent and cacheable |
+| S5 | Motion checks before the VLM | cheap, deterministic, and catch the defects the user reported |
+| S6 | x264 without MB-tree | byte-identical clips; a 20 s 1080p30 scene renders in 19.7 s instead of 22.2 s, peaks at 0.55 GB instead of 0.95 GB, and is 32% larger at 2.3 dB higher PSNR |
 ## 10 Narration
 
 10.1 $\Phi_6$ maps each scene $s$ with lines $\ell_1,\dots,\ell_m$ to a `Narration`: audio, duration, spoken `words` and written `captions` with times, bookmark times. Entry: `narrate.narrate(board, store, tts, verbalizer, workers) -> {scene id: digest}`.
@@ -430,13 +491,13 @@ kept if it exists and a visual is alive; at most 6, evenly subsampled. A transie
 | `Kokoro` (SPEC Q6) | 24 kHz | voice `af_heart`, speed 0.85 | verified with the weights above |
 | `Espeak` (no `ANIMATH_KOKORO`) | 22.05 kHz | `en-us`, 140 wpm | verified; last resort |
 
-Other voices of the file: `am_michael` (US), `bf_emma`, `bm_george` (GB; prefix `b` selects `en-gb` phonemes), and the rest of the Kokoro v1.0 list. The `voice` parameter selects one (§12.1).
+Other voices of the file: `am_michael` (US), `bf_emma`, `bm_george` (GB; prefix `b` selects `en-gb` phonemes), and the rest of the Kokoro v1.0 list. The `voice` parameter selects one (§12.1). `pipeline.voice` sets the rate from `wpm`: Kokoro speed $\sigma = \text{wpm}/165$ to 3 decimals (§10.5; 135 wpm gives 0.818), espeak-ng `-s wpm`. Without `ANIMATH_KOKORO`, a Kokoro voice name (`af_heart`) falls back to espeak-ng's default voice.
 
 10.3 Cache key. With $v$ the stage version,
 $$k = d\big(["\text{narrate}", v, d(\text{id}, \text{narration}), \text{tts.id}, \text{verbalizer.id}]\big). \tag{10.1}$$
 `tts.id` = `kokoro:` model SHA-256 prefix, voice, speed, $d$(lexicon, word list, phoneme map, vocab, voice style); `verbalizer.id` = `sre:` domain, $d$(`TEX`, `SPEECH`). Edits to visuals, math or duration of a scene do not trigger re-synthesis; edits to any pronunciation table do. `written` and the `align` constants are covered by $v$.
 
-10.4 Sentences. Lines are joined until one ends in `.`, `!` or `?` (closing quotes and brackets allowed after it); each sentence is one `synth` call, so intonation runs across line boundaries. A bookmark is the index of its line's first word within the sentence.
+10.4 Sentences. Lines are joined until one ends in `.`, `!` or `?` (closing quotes and brackets allowed after it) or has a pause `pause_s` $> 0$; each such utterance is one `synth` call, so intonation runs across line boundaries, and carries the pause $p$ of its last line. A bookmark is the index of its line's first word within the utterance.
 
 **Algorithm 10.1 (Kokoro synthesis).** Input: words $w_1,\dots,w_n$ of a sentence.
 1. Phonemes $p_i$ by Algorithm 10.2. Leading and trailing punctuation $o_i, c_i$ of $w_i$ stays in the token stream (`;:,.!?—…"()“”`): Kokoro renders it as pauses and intonation.
@@ -457,15 +518,15 @@ The extra output is added by editing the serialized `ModelProto` (field 7 graph,
 
 $p_i$ is the in-context pronunciation of $w_i$, non-empty for every pronounced word, so (10.2) gives every word a positive span.
 
-**Algorithm 10.3 (timeline, `align.timeline`).** Rate $r$; sentences $k = 1,\dots,K$ with PCM $x_k$ and spans (10.2).
+**Algorithm 10.3 (timeline, `align.timeline`).** Rate $r$; utterances $k = 1,\dots,K$ with PCM $x_k$, spans (10.2) and pauses $p_k$.
 1. Bounds $[a_k, b_k)$: first to last 10 ms frame with RMS above $-60$ dBFS, widened by 50 ms, clamped; a silent sentence raises `NarrateError`.
 2. Raised-cosine fades of $m = 0.01r$ samples at both ends, gain $\frac12 - \frac12\cos\big(\pi (j+\frac12)/m\big)$, $j < m$.
-3. Layout: $L = 0.3$ s silence, each faded sentence followed by $G = 0.4$ s, the last gap replaced by $T = 0.6$ s. Offsets $o_1 = Lr$, $o_{k+1} = o_k + b_k - a_k + Gr$.
+3. Layout: $L = 0.3$ s silence, each faded utterance followed by $G + p_k$ with $G = 0.4$ s, the last gap replaced by $\max(T, p_K)$ with $T = 0.6$ s. Offsets $o_1 = Lr$, $o_{k+1} = o_k + b_k - a_k + (G + p_k)r$.
 4. Word times $\big(o_k + \operatorname{clip}(\text{span}, a_k, b_k) - a_k\big)/r$; a bookmark is the start of its word.
 
-Duration $= L + T + (K-1)G + \sum_k (b_k - a_k)/r$. Silence between sentences is $G$ plus both pads, ≈ 0.5 s; within a sentence only the model's own pauses occur.
+Duration $= L + \max(T, p_K) + \sum_{k<K} (G + p_k) + \sum_k (b_k - a_k)/r$. Silence between utterances is $G + p_k$ plus both pads, ≈ 0.5 s without a pause; within an utterance only the model's own pauses occur.
 
-10.5 Accuracy. Word times are the model's token durations, exact to one frame (25 ms); bookmarks are word starts, so $Q_3$ holds by construction. Measured on the §2.8 test narration (11 scenes, 789 words, `af_heart`, speed 0.85): 140 wpm overall, 151 wpm within sentences; Whisper base.en (offline) transcribed 92.7 % of the words verbatim, the rest spelling variants (*colour*, numerals).
+10.5 Accuracy. Word times are the model's token durations, exact to one frame (25 ms); bookmarks are word starts, so $Q_3$ holds by construction. Measured on the §2.8 test narration (11 scenes, 789 words, `af_heart`, speed 0.85): 140 wpm overall, 151 wpm within sentences, so wpm $\approx 165\,\sigma$ (`Kokoro.wpm_per_speed`; 0.9 gave 148); Whisper base.en (offline) transcribed 92.7 % of the words verbatim, the rest spelling variants (*colour*, numerals).
 
 10.6 Math speech and captions. `TEX` rewrites before SRE: `\mathcal H^2` → H two; two-digit subscripts spaced; upright superscript words read as words. `SPEECH` rewrites after SRE turn ClearSpeak into lecture style: powers $-1$, $T$, $-T$, $*$, $H$ → inverse, transpose, inverse transpose, star, Hermitian; *raised to the k power* → to the k; fractions and *divided by* → over; *the metric of x sub 2* → the 2 norm of x; *script l* → ell; *O of* → order; font words, parentheses and *sub* dropped; *comma dot dot dot comma* → up to; *negative* → minus; *is a member of* → in.
 
@@ -511,7 +572,7 @@ Why not linear `loudnorm`: its linear mode needs measured peak plus gain below t
 
 ## 12 Orchestration and evaluation
 
-12.1 Interface. `pipeline.Pipeline(settings, llm, tts, verbalizer, animate, fetch, check)`; `run(bundle, edit=None, part=None) -> Manifest | Paused`. One method per stage takes and returns artifacts; `animate` has the WP8 signature `(scene, data, narration, store, llm, params) -> (SceneRender, Usage)`, default `render_only` (primitive library, §9) until `scene.animate` lands. `tts(params)` defaults to `voice`: Kokoro at `$ANIMATH_KOKORO`, else espeak-ng; `voice = default` keeps the backend default.
+12.1 Interface. `pipeline.Pipeline(settings, llm, tts, verbalizer, animate, fetch, check)`; `run(bundle, edit=None, part=None) -> Manifest | Paused`. One method per stage takes and returns artifacts; `animate` has the WP8 signature `(scene, data, narration, store, llm, params) -> (SceneRender, Usage)`, default `render_only` (primitive library, §9) until `scene.animate` lands. `tts(params)` defaults to `voice`: Kokoro at `$ANIMATH_KOKORO`, else espeak-ng, both at `wpm` (§10.2); `voice = default` keeps the backend default.
 
 **Algorithm 12.1 (run).**
 1. $\mathcal D = \Phi_1(\mathcal S)$; if `part`, restrict $\mathcal D$ (Algorithm 12.2).

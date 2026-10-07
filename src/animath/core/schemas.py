@@ -45,6 +45,7 @@ class Audience(StrEnum):
 
 class Params(Model):
     duration_s: float = Field(180.0, gt=0, le=1200)
+    wpm: int = Field(135, ge=80, le=220, description="speech rate in words per minute, 80 to 220")
     audience: Audience = Audience.GRADUATE
     focus: str | None = None
     language: str = "en"
@@ -211,6 +212,9 @@ class DataRequest(Model):
 class Line(Model):
     text: str = Field(min_length=1)
     bookmark: str | None = None
+    pause_s: float = Field(
+        0.0, ge=0.0, le=30.0, description="silence after the line, 0 to 30 s; ends its utterance"
+    )
 
 
 class Visual(Model):
