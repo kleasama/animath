@@ -350,11 +350,12 @@ kept if it exists and a visual is alive; at most 6, evenly subsampled. A transie
 3. Unit tests use a queued fake LLM (`tests/scene/fake.py`); no network.
 ## 10 Narration
 
-10.1 $\Phi_6$ maps each scene $s$ with lines $\ell_1,\dots,\ell_m$ to a `Narration`. Entry: `narrate.narrate(board, store, tts, verbalizer, workers) -> {scene id: digest}`.
+10.1 $\Phi_6$ maps each scene $s$ with lines $\ell_1,\dots,\ell_m$ to a `Narration`: audio, duration, spoken `words` and written `captions` with times, bookmark times. Entry: `narrate.narrate(board, store, tts, verbalizer, workers) -> {scene id: digest}`.
 
 | Module | Content |
 |---|---|
-| `verbalize` | split prose and inline math (`$…$`, `$$…$$`, `\(…\)`); `TEX` rewrites → MathML (MathJax 3.2.1) → speech (SRE 4.1.4, ClearSpeak) → `SPEECH` rewrites (§10.6), one `node sre.cjs` call per stage run |
+| `verbalize` | split prose and inline math (`$…$`, `$$…$$`, `\(…\)`); `TEX` rewrites → MathML (MathJax 3.2.1) → speech (SRE 4.1.4, ClearSpeak) → `SPEECH` rewrites (§10.6), one `node sre.cjs` call per stage run; source tokens as (written, spoken) pairs (§10.6) |
+| `written` | inline TeX → compact Unicode for captions (§10.6) |
 | `g2p` | spoken forms, espeak-ng IPA mapped to the misaki inventory, per-word alignment (Algorithm 10.2) |
 | `tts` | `TTS` protocol (`id`, `rate`, `synth(text) -> (int16 PCM, word spans)`); `Kokoro`, `Espeak`; WAV I/O |
 | `align` | sentence timeline: trim, fades, gaps, word and bookmark times (Algorithm 10.3) |
@@ -377,7 +378,7 @@ Other voices of the file: `am_michael` (US), `bf_emma`, `bm_george` (GB; prefix 
 
 10.3 Cache key. With $v$ the stage version,
 $$k = d\big(["\text{narrate}", v, d(\text{id}, \text{narration}), \text{tts.id}, \text{verbalizer.id}]\big). \tag{10.1}$$
-`tts.id` = `kokoro:` model SHA-256 prefix, voice, speed, $d$(lexicon, word list, phoneme map, vocab, voice style); `verbalizer.id` = `sre:` domain, $d$(`TEX`, `SPEECH`). Edits to visuals, math or duration of a scene do not trigger re-synthesis; edits to any pronunciation table do.
+`tts.id` = `kokoro:` model SHA-256 prefix, voice, speed, $d$(lexicon, word list, phoneme map, vocab, voice style); `verbalizer.id` = `sre:` domain, $d$(`TEX`, `SPEECH`). Edits to visuals, math or duration of a scene do not trigger re-synthesis; edits to any pronunciation table do. `written` and the `align` constants are covered by $v$.
 
 10.4 Sentences. Lines are joined until one ends in `.`, `!` or `?` (closing quotes and brackets allowed after it); each sentence is one `synth` call, so intonation runs across line boundaries. A bookmark is the index of its line's first word within the sentence.
 
@@ -410,13 +411,17 @@ Duration $= L + T + (K-1)G + \sum_k (b_k - a_k)/r$. Silence between sentences is
 
 10.5 Accuracy. Word times are the model's token durations, exact to one frame (25 ms); bookmarks are word starts, so $Q_3$ holds by construction. Measured on the §2.8 test narration (11 scenes, 789 words, `af_heart`, speed 0.85): 140 wpm overall, 151 wpm within sentences; Whisper base.en (offline) transcribed 92.7 % of the words verbatim, the rest spelling variants (*colour*, numerals).
 
-10.6 Math speech. `TEX` rewrites before SRE: `\mathcal H^2` → H two; two-digit subscripts spaced; upright superscript words read as words. `SPEECH` rewrites after SRE turn ClearSpeak into lecture style: powers $-1$, $T$, $-T$, $*$, $H$ → inverse, transpose, inverse transpose, star, Hermitian; *raised to the k power* → to the k; fractions and *divided by* → over; *the metric of x sub 2* → the 2 norm of x; *script l* → ell; *O of* → order; font words, parentheses and *sub* dropped; *comma dot dot dot comma* → up to; *negative* → minus; *is a member of* → in.
+10.6 Math speech and captions. `TEX` rewrites before SRE: `\mathcal H^2` → H two; two-digit subscripts spaced; upright superscript words read as words. `SPEECH` rewrites after SRE turn ClearSpeak into lecture style: powers $-1$, $T$, $-T$, $*$, $H$ → inverse, transpose, inverse transpose, star, Hermitian; *raised to the k power* → to the k; fractions and *divided by* → over; *the metric of x sub 2* → the 2 norm of x; *script l* → ell; *O of* → order; font words, parentheses and *sub* dropped; *comma dot dot dot comma* → up to; *negative* → minus; *is a member of* → in.
 
-| TeX | Spoken |
-|---|---|
-| `L_{21}`, `D_{RR}`, `\mathcal N(t)` | L 2 1, D R R, N of t |
-| `\epsilon_L/u`, `\chi/(1-\chi)` | epsilon L over u, chi over 1 minus chi |
-| `\mathcal H^2`, `\|A^{-1}\|_2` | H two, the 2 norm of A inverse |
+| TeX | Spoken | Caption |
+|---|---|---|
+| `L_{21}`, `D_{RR}`, `\mathcal N(t)` | L 2 1, D R R, N of t | L₂₁, D_RR, 𝒩(t) |
+| `\epsilon_L/u`, `\chi/(1-\chi)` | epsilon L over u, chi over 1 minus chi | ε_L/u, χ/(1−χ) |
+| `\mathcal H^2`, `\|A^{-1}\|_2` | H two, the 2 norm of A inverse | ℋ², ‖A⁻¹‖₂ |
+
+Captions show what is written, speech what is said. `Verbalizer.tokens` splits each line at prose whitespace into source tokens $\tau_1,\dots,\tau_q$, a formula with the punctuation touching it being one token, each with its written and spoken form. The written form of a formula is `written(tex)`, a recursive descent over TeX tokens: Greek letters and operators as symbols; `\mathcal`, `\mathbb` letters; sub- and superscripts in Unicode when every character has one and the script is no word of three or more letters, else `_max`, `_(i,j)`; `\frac{a}{b}` as $a/b$, compound parts parenthesized; accents as combining marks; relations spaced; `\left`, `\right`, fonts and environments dropped; other commands kept by name. With $n_j$ spoken words in $\tau_j$ and $N_j = \sum_{i\le j} n_i$, caption $j$ spans
+$$\big[\text{start}(w_{N_{j-1}+1}),\; \text{end}(w_{N_j})\big], \tag{10.3}$$
+so a caption boundary is a token boundary; tokens with no spoken word are dropped. `words` keeps the spoken words (bookmarks, $Q_3$); `captions` feeds the subtitles (§11.3).
 
 10.7 Concurrency. Scenes run on a thread pool of `workers`; formulas of all uncached scenes are verbalized in one subprocess before the pool starts; the ONNX session is shared (thread-safe `run`) with `intra_op_num_threads` fixed for determinism.
 
@@ -442,7 +447,7 @@ Segment $i$ is exactly $n_i$ frames and $S_i$ samples; $\sum_i S_i = \operatorna
 
 Why not linear `loudnorm`: its linear mode needs measured peak plus gain below the target peak; speech whose true peak exceeds its loudness by more than 14.5 dB (Kokoro at speed 0.85: ≈ 20 dB) forces the dynamic mode, which pumps. A fixed gain and a look-ahead limiter that only touches transients keep $I$ within 1 LU of the target and the true peak below $-1.5$ dBTP after AAC (§2.8 test, three scenes: $-16.4$ LUFS, $-2.0$ dBTP; sine with sparse impulses: $-16.6$ LUFS, $-2.5$ dBTP). One gain serves the whole film, so scenes differ only by their own loudness (Kokoro: 0.65 LU spread over 11 scenes).
 
-11.3 Subtitles. Words are grouped greedily into cues, closed at a word ending in `. ? ! ; :`, before exceeding 84 characters, or before spanning 6 s; cues longer than 42 characters wrap once at the space nearest the middle; text is HTML-escaped. The global VTT is built here, since only assembly knows $T_i$.
+11.3 Subtitles. Caption tokens (§10.6; the words when a narration has none) are grouped greedily into cues, closed at a token ending in `. ? ! ; :`, before exceeding 84 characters, or before spanning 6 s; cues longer than 42 characters wrap once at the space nearest the middle; text is HTML-escaped. A cue never splits a formula. The global VTT is built here, since only assembly knows $T_i$.
 
 11.4 Manifest. `artifacts` = {`storyboard`, `render/<id>`, `narration/<id>`}; `versions` = {`assemble`, `ffmpeg`}; `timings_s.assemble`; `metrics` = {`duration_s` $=T_N$, `loudness_in_lufs`, `true_peak_in_dbtp` (narration, pass 1), `loudness_out_lufs`, `true_peak_out_dbtp` (encoded output, pass 3)}. `usage` is zero; the orchestrator adds stage usage.
 

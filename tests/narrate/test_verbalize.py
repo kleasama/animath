@@ -1,3 +1,4 @@
+# ruff: noqa: RUF001
 import re
 import shutil
 import subprocess
@@ -34,6 +35,27 @@ def test_lines_substitutes_in_order_with_one_call(script: Script, tmp_path: Path
     assert out == ["Let <x|mathspeak> be.", "No math here.", "<y|mathspeak>-axis and <z|mathspeak>"]
     assert log.read_text() == "x"
     assert re.fullmatch(r"sre:mathspeak:[0-9a-f]{8}", v.id)
+
+
+def test_tokens_pair_written_and_spoken_forms(script: Script) -> None:
+    v = Verbalizer(
+        cmd=[
+            script('r = json.load(sys.stdin); print(json.dumps([" ".join(t) for t in r["latex"]]))')
+        ]
+    )
+    text = "Take $t$, then ($xy$) and  $a-b$."
+    assert v.tokens([text, "plain"]) == [
+        [
+            ("Take", "Take"),
+            ("t,", "t,"),
+            ("then", "then"),
+            ("(xy)", "(x y)"),
+            ("and", "and"),
+            ("a−b.", "a - b."),
+        ],
+        [("plain", "plain")],
+    ]
+    assert v.lines([text]) == ["Take t, then (x y) and a - b."]
 
 
 @pytest.mark.parametrize(

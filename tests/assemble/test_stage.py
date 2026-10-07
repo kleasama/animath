@@ -9,7 +9,7 @@ import pytest
 from animath.assemble import ffmpeg, timeline
 from animath.assemble import stage as st
 from animath.core.errors import AssembleError
-from animath.core.schemas import Manifest, Narration, SceneRender
+from animath.core.schemas import Manifest, Narration, SceneRender, Word
 from animath.core.store import Store
 from tests.assemble.conftest import Media
 
@@ -85,6 +85,17 @@ def test_peaky_narration_meets_loudness_and_true_peak(store: Store, two: Two, me
     assert m.metrics["true_peak_in_dbtp"] - m.metrics["loudness_in_lufs"] > 14.5
     assert m.metrics["loudness_out_lufs"] == pytest.approx(ffmpeg.LUFS, abs=1.0)
     assert m.metrics["true_peak_out_dbtp"] <= -1.5
+
+
+def test_subtitles_prefer_captions(store: Store, two: Two) -> None:
+    board, renders, narrations = two
+    n1 = _redo(store, narrations[0], Narration, captions=(Word(text="L₂₁.", start=0.1, end=0.6),))
+    m = store.get(Manifest, st.assemble(store, board, renders, [n1, narrations[1]]))
+    cues = store.get_blob(m.subtitles).decode().split("\n\n")
+    assert cues[1:3] == [
+        "00:00:00.100 --> 00:00:00.600\nL₂₁.",
+        "00:00:01.000 --> 00:00:01.800\nTwo x&lt;y.",
+    ]
 
 
 def test_cached_and_deterministic(store: Store, two: Two, monkeypatch: pytest.MonkeyPatch) -> None:
