@@ -102,6 +102,47 @@ $$\frac{\|e_k\|_A}{\|e_0\|_A} \le 2\Big(\frac{\sqrt\kappa-1}{\sqrt\kappa+1}\Big)
 ## 9 Scenes and rendering
 Algorithm 9.1 Scene generation: SPEC Algorithm 6.1.
 ## 10 Narration
+
+10.1 $\Phi_6$ maps each scene $s$ with lines $\ell_1,\dots,\ell_m$ to a `Narration`. Entry: `narrate.narrate(board, store, tts, verbalizer, workers) -> {scene id: digest}`.
+
+| Module | Content |
+|---|---|
+| `verbalize` | split prose and inline math (`$…$`, `$$…$$`, `\(…\)`); TeX → MathML (MathJax 3.2.1) → speech (SRE 4.1.4, ClearSpeak) in one `node sre.cjs` call per stage run |
+| `tts` | `TTS` protocol (`id`, `rate`, `synth(text) -> int16 PCM`); `Kokoro`, `Espeak`; WAV I/O |
+| `align` | trim, concatenate, bookmark and word times (Algorithm 10.1) |
+| `subtitles` | WebVTT cues |
+| `proc` | subprocess call with typed failure |
+
+10.2 Runtime requirements: `espeak-ng` on `PATH`; `NODE_PATH` holding `speech-rule-engine@4.1.4` and `mathjax-full@3.2.1`; for Kokoro a directory with `model.onnx` (onnx-community/Kokoro-82M-v1.0-ONNX), `config.json` with key `vocab` (hexgrad/Kokoro-82M), `voices/<voice>.bin` (float32, $510\times256$).
+
+| Backend | Rate | Input | Status |
+|---|---|---|---|
+| `Kokoro` (default, SPEC Q6) | 24 kHz | espeak-ng IPA → vocab ids, chunks $\le 510$, style row $\lvert\text{chunk}\rvert-1$ | tested against a fake ONNX session only: Hugging Face is unreachable from the build containers |
+| `Espeak` | 22.05 kHz | text on stdin | verified |
+
+10.3 Cache key. With $v$ the stage version,
+$$k = d\big(["\text{narrate}", v, d(\text{id}, \text{narration}), \text{tts.id}, \text{verbalizer.id}]\big). \tag{10.1}$$
+Edits to visuals, math or duration of a scene do not trigger re-synthesis.
+
+**Algorithm 10.1 (timeline).** Rate $r$, gap $g = \operatorname{round}(0.3\,r)$, offset $o_1 = 0$. For each line $i$:
+1. Synthesize; let $[a_i, b_i)$ be the samples between the first and last with $\lvert x\rvert > 328$ (≈ −40 dBFS); $n_i = b_i - a_i$; silence raises `NarrateError`.
+2. Bookmark of $\ell_i$ at $o_i / r$.
+3. Tokens $\tau_1,\dots,\tau_K$ with weights $w_k = 1 + \#\text{alnum}(\tau_k)$, $C_k = \sum_{j\le k} w_j$; token $k$ spans
+$$\big[\,o_i + \operatorname{round}(n_i C_{k-1}/C_K),\; o_i + \operatorname{round}(n_i C_k/C_K)\,\big] / r. \tag{10.2}$$
+4. $o_{i+1} = o_i + n_i + g$.
+
+Output: voiced segments joined by $g$ zeros (no trailing gap); duration $= \sum_i n_i/r + (m-1)g/r$. Integer sample arithmetic guarantees the `Narration` validators (monotone words, last end $\le$ duration).
+
+10.4 Accuracy. Bookmarks coincide with speech onset up to the threshold, so $Q_3$ at bookmark granularity holds by construction. Word times (10.2) are length-proportional estimates used only for subtitles.
+
+10.5 Subtitles. A cue holds at most two lines of 42 columns; a new cue starts after `.?!` or a pause $> 0.25$ s. `subtitles.vtt([(narration, offset), …])` is called by the orchestrator (Rule 6.2 forbids `assemble` to import `narrate`).
+
+10.6 Concurrency. Scenes run on a thread pool of `workers`; formulas of all uncached scenes are verbalized in one subprocess before the pool starts; the ONNX session is shared (thread-safe `run`) with `intra_op_num_threads` fixed for determinism.
+
+10.7 Deviations from SPEC §6.3. Forced alignment (torchaudio) is not used: per-line synthesis makes bookmarks exact, torchaudio's `forced_align` is deprecated, and torch would dominate the image. espeak-ng IPA drops punctuation, so Kokoro prosody lacks pause cues.
+
+10.8 Measurements (4 cores, Espeak, two lines with three formulas): cold 0.74 s, cached 0.22 s, including interpreter start.
+
 ## 11 Assembly
 
 11.1 Interface. `assemble.assemble(store, board, renders, narrations, threads=1) -> str` maps the digests of a `Storyboard`, its `SceneRender`s and `Narration`s (any order, matched by `scene_id`) to the digest of a `Manifest`. Key $k = d([\texttt{assemble}, v, p, d_{\mathcal{B}}, d^R_1,\dots,d^R_N, d^N_1,\dots,d^N_N])$ in scene order, $p$ = threads; hit $\Rightarrow$ no work.

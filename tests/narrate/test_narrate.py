@@ -1,0 +1,92 @@
+import threading
+from pathlib import Path
+
+import pytest
+
+from animath.core.schemas import Line, Narration, Scene, Storyboard, Visual
+from animath.core.store import Store
+from animath.narrate import key, narrate
+from animath.narrate.tts import PCM, from_wav
+from animath.narrate.verbalize import Verbalizer
+from tests.narrate.conftest import Script, tone
+
+SAY = 'r = json.load(sys.stdin); print(json.dumps(["ex " * len(t) for t in r["latex"]]))'
+
+
+class FakeTTS:
+    id = "fake:1"
+    rate = 1000
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+        self.lock = threading.Lock()
+
+    def synth(self, text: str) -> PCM:
+        with self.lock:
+            self.calls.append(text)
+        return tone(40 * len(text.split()), lead=3, tail=9)
+
+
+@pytest.fixture
+def verbalizer(script: Script) -> Verbalizer:
+    return Verbalizer(cmd=[script(SAY)])
+
+
+def scene(sid: str, *lines: Line) -> Scene:
+    return Scene(id=sid, goal="g", narration=lines, duration_s=5)
+
+
+BOARD = Storyboard(
+    title="GMRES",
+    scenes=(
+        scene("s1", Line(text="Minimise $r$ over K.", bookmark="k"), Line(text="Stop.")),
+        scene("s2", Line(text="Restart.", bookmark="r")),
+    ),
+)
+
+
+def test_narrate_produces_valid_narrations(store: Store, verbalizer: Verbalizer) -> None:
+    tts = FakeTTS()
+    out = narrate(BOARD, store, tts, verbalizer)
+    assert list(out) == ["s1", "s2"]
+    assert tts.calls == ["Minimise ex over K.", "Stop.", "Restart."]
+    n = store.get(Narration, out["s1"])
+    assert n.scene_id == "s1"
+    assert n.bookmarks == {"k": 0.0}
+    assert [w.text for w in n.words] == ["Minimise", "ex", "over", "K.", "Stop."]
+    assert n.duration_s == (160 + 300 + 40) / 1000
+    assert from_wav(store.get_blob(n.audio), 1000).size == 500
+    assert store.lookup(Narration, key(BOARD.scenes[1], tts, verbalizer)) is not None
+
+
+def test_cached_scenes_are_skipped(store: Store, verbalizer: Verbalizer, tmp_path: Path) -> None:
+    first = narrate(BOARD, store, FakeTTS(), verbalizer)
+    tts = FakeTTS()
+    edited = Storyboard(
+        title="GMRES",
+        scenes=(BOARD.scenes[0], scene("s2", Line(text="Restart now.", bookmark="r"))),
+    )
+    second = narrate(edited, store, tts, Verbalizer(cmd=["/nonexistent"]))
+    assert second["s1"] == first["s1"]
+    assert second["s2"] != first["s2"]
+    assert tts.calls == ["Restart now."]
+
+
+def test_key_ignores_visuals_and_tracks_backends(verbalizer: Verbalizer) -> None:
+    s = BOARD.scenes[0]
+    tts = FakeTTS()
+    moved = s.model_copy(update={"visuals": (Visual(primitive="equation", at="k"),)})
+    assert key(moved, tts, verbalizer) == key(s, tts, verbalizer)
+    other = FakeTTS()
+    other.id = "fake:2"
+    assert key(s, other, verbalizer) != key(s, tts, verbalizer)
+    assert key(s, tts, Verbalizer("mathspeak")) != key(s, tts, verbalizer)
+
+
+def test_parallel_matches_serial(tmp_path: Path, verbalizer: Verbalizer) -> None:
+    board = Storyboard(
+        title="t", scenes=tuple(scene(f"s{i}", Line(text="a " * (i + 1))) for i in range(8))
+    )
+    serial = narrate(board, Store(tmp_path / "a"), FakeTTS(), verbalizer)
+    parallel = narrate(board, Store(tmp_path / "b"), FakeTTS(), verbalizer, workers=4)
+    assert serial == parallel
