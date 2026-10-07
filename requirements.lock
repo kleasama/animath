@@ -32,6 +32,7 @@ jiter==0.17.0
 jsonschema==4.26.0
 jsonschema-specifications==2025.9.1
 kiwisolver==1.5.1
+lark==1.3.1
 librt==0.16.0 ; platform_python_implementation != 'PyPy'
 manim==0.21.0
 manimpango==0.7.0
@@ -39,8 +40,9 @@ mapbox-earcut==2.1.0
 markdown-it-py==4.2.0
 matplotlib==3.11.2
 mdurl==0.1.2
-moderngl==5.12.0
+moderngl==5.13.0
 moderngl-window==3.1.1
+mpmath==1.3.0
 mypy==2.4.0
 mypy-extensions==1.1.0
 networkx==3.7
@@ -90,6 +92,7 @@ sniffio==1.3.1
 soupsieve==2.10
 srt==3.5.3
 svgelements==1.9.6
+sympy==1.14.0
 tqdm==4.70.1
 truststore==0.10.4 ; sys_platform != 'emscripten'
 types-jsonschema==4.26.0.20261006

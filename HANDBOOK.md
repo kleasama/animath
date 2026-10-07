@@ -21,6 +21,9 @@ Reference for a developer at any pickup point.
 | `.venv/bin/animath schema <kind>` | JSON schema of an artifact kind |
 | `.venv/bin/animath inspect <kind> <digest>` | print a stored artifact |
 | `.venv/bin/animath config` | effective settings |
+| `.venv/bin/animath run <src> [-p k=v] [--pages 3-7] [--section 2.1] [--approve \| --edit f]` | $\Phi$; pauses at gates (§12.3) |
+| `.venv/bin/animath stage <name> <digest> [-p k=v]` | one stage on a stored input (F11) |
+| `.venv/bin/animath eval <manifest> [--expected doc.json] [--judge]` | $Q_1$–$Q_7$, $N_1$ (§12.5) |
 
 2.3 Settings (`core.config.Settings`): defaults, then TOML file (`--config`), then `ANIMATH_<FIELD>` variables. Fields: `store`, `model`, `effort`, `max_tokens`, `workers`, `offline`.
 2.4 Image: `docker/Dockerfile` (TeX Live, dvisvgm, ffmpeg, pandoc, cairo/pango, espeak-ng, node, gfortran).
@@ -406,7 +409,64 @@ Segment $i$ is exactly $n_i$ frames and $S_i$ samples; $\sum_i S_i = \operatorna
 
 11.5 Notes. Clip audio is ignored; narration is the only audio. Output bytes are reproducible for fixed inputs, ffmpeg build and $p$; $p$ changes x264 output, hence in $k$. Requires `ffmpeg`, `ffprobe` (apt `ffmpeg`, with libx264). Blobs are passed to ffmpeg by store path (content-probed); only the output uses a temporary directory, removed on exit.
 
-## 12 Evaluation
+## 12 Orchestration and evaluation
+
+12.1 Interface. `pipeline.Pipeline(settings, llm, tts, verbalizer, animate, fetch, check)`; `run(bundle, edit=None, part=None) -> Manifest | Paused`. One method per stage takes and returns artifacts; `animate` has the WP8 signature `(scene, data, narration, store, llm, params) -> (SceneRender, Usage)`, default `render_only` (primitive library, §9) until `scene.animate` lands. `tts(params)` defaults to `voice`: Kokoro at `$ANIMATH_KOKORO`, else espeak-ng; `voice = default` keeps the backend default.
+
+**Algorithm 12.1 (run).**
+1. $\mathcal D = \Phi_1(\mathcal S)$; if `part`, restrict $\mathcal D$ (Algorithm 12.2).
+2. $\mathcal K = \Phi_2(\mathcal D)$; gate (§12.3).
+3. $\mathcal B = \Phi_3(\mathcal K, \pi)$ with `scene.catalog()` and kernel schemas; gate.
+4. $\Phi_4 \parallel \Phi_6$ on two threads; each uses `workers` threads.
+5. $\Phi_5$ per scene, cached under
+$$k_s = d\big([\texttt{animate}, v, f, d(s), d(N_s), d(\pi_5), d(D_{s,1}), \dots]\big), \tag{12.1}$$
+$f$ the animate function's qualified name, $\pi_5$ = (`width`, `height`, `fps`, `style`, `seed`, `max_retries`), $D_{s,i}$ the scene's datasets by request digest. Misses run in a `spawn` process pool of $\min(p, \#\text{misses})$ workers (render is thread-unsafe); inline if $p = 1$ or one miss. Workers rebuild store and LLM from `Settings`; returned usage is summed with that of $\Phi_1$–$\Phi_3$.
+6. $\Phi_7$; the manifest gains `source`, `doc`, `graph`, `dataset/<request>` digests, stage versions and model, stage timings, summed usage, automatic metrics (§12.5); it is stored and returned.
+
+12.2 Selection. `bundle(path, params, store, pages)`: a PDF alone, MD with sibling `.bib`, LaTeX with its tree (`.tex .bib .bbl .sty .cls`, hidden paths skipped). `pages("3-7,9")` copies the 1-based pages by pdfium and fixes the random trailer `/ID` to $d(\text{bytes}, \text{indices})$, so the bundle digest is reproducible (N2).
+
+**Algorithm 12.2 (section).** Path components split by `/`; a component `2.3.1` expands to ordinals $2, 3, 1$, any other is a case-folded title substring. Start with all blocks. For each key: among headings strictly inside the current range, take those of minimal level; pick the $k$-th or the first matching title; the range becomes that heading up to the next heading of the same level. Refs to labels outside the range are dropped (bibliography kept); title $=$ document title and chosen headings joined by `/`. No match raises `PipelineError`.
+
+12.3 Gates (F12). With `approval_gates`, after $\Phi_2$ and $\Phi_3$ the artifact $a$ is looked up under $k = d([\texttt{gate}, \text{kind}, d(a)])$ in namespace `gate`; a hit continues with the approved digest, which may name an edited artifact. A miss returns `Paused(kind, d(a))` unless `edit` is given: `''` approves $a$, JSON text approves the validated replacement; one `edit` serves one gate. Every stage is cached, so resuming re-runs nothing.
+
+| Step | CLI |
+|---|---|
+| review $\mathcal K$ | `animath run src` → `{"paused": "graph", "digest": d}`; `animath inspect graph d` |
+| approve | `animath run src --approve`, or `--edit graph.json` |
+| review, approve $\mathcal B$ | same, kind `storyboard` |
+
+12.4 Budget (N9). After each LLM stage the summed usage $u$ costs $c = p\cdot u / 10^6$ USD with per-MTok prices $p$ (input, output, cache read, cache write) from `PRICES` (`claude-opus-5-5`: 4, 20, 0.2, 5). $c >$ `budget_usd` raises `PipelineError`; a model without prices raises when a budget is set.
+
+12.5 Metrics (SPEC §5), `eval.metrics`, `eval.formula`, `eval.judge`; `eval.evaluate(store, manifest, expected, llm)` reads every input from the manifest.
+
+| Metric | Definition | Source |
+|---|---|---|
+| $Q_1$ `q1_render` | fraction of renders with `checks.render` | automatic |
+| $Q_2$ `q2_fidelity` | fraction of reference equations (by label, else position) whose normalized LaTeX matches | `--expected` |
+| $Q_3$ `q3_sync_ms` | $10^3\max_{s,b}\lvert t^R_{s,b} - t^N_{s,b}\rvert$ | automatic |
+| $Q_4$ `q4_layout` | failed `layout`, `critic` checks per scene | automatic |
+| $Q_5$ `q5_coverage` | §6.3 | automatic |
+| $Q_6$ `q6_duration` | $\lvert T_N - T\rvert / T$ | automatic |
+| $Q_7$ `q7_pedagogy` | mean of the 4 rubric scores (1–5) of the judge on storyboard, source equations, 8 keyframes (768 px, $t_j = (j+\frac12)T/8$) | `--judge` |
+| $N_1$ `n1_traced` | fraction of on-screen formulas traced (Algorithm 12.3) | automatic |
+
+`metrics.failures` lists metrics missing their target (`TARGETS`).
+
+**Algorithm 12.3 (equivalence, N1, I2).** Normalization: drop spacing and sizing commands (`\,`, `\quad`, `\left`, `\big`, …), tokenize into control words, control symbols and characters, unwrap single-token script braces, strip trailing `.,;`; compare token sequences. Equivalence: parse by SymPy `parse_latex` (Lark backend, font commands removed); an ambiguous parse yields all readings; equalities $a = b$, $c = d$ agree iff $(a-b) \mp (c-d)$ simplifies to 0, expressions iff $a - b$ does. Verdict: True if some pair agrees, False if none, None if either side does not parse. Formulas shown are `math`, `equation` latex and `derive` steps (match markers removed). A formula is traced iff it matches an equation of $\mathcal D$ (normalized or equivalent), or, as a derive step, is equivalent to its predecessor.
+
+12.6 Golden run (C5). Requires `ANTHROPIC_API_KEY` as an environment secret. For each case: `animath run <source> -p approval_gates=false`, then `animath eval <manifest> --expected tests/golden/<case>/expected.json --judge`.
+
+12.7 Decisions.
+
+| # | Decision | Reason |
+|---|---|---|
+| E1 | Section and page selection in the orchestrator, not in ingestion | DocIR and PDF slicing suffice; no contract change |
+| E2 | Gate approvals keyed by the produced artifact digest | stages are cached, so the key is stable; edits are plain artifacts |
+| E3 | $\Phi_5$ in spawned processes | Manim and VTK globals; `fork` after threads is unsafe |
+| E4 | SymPy verdict is three-valued | Lark grammar covers a subset of LaTeX; unparseable is not wrong |
+| E5 | $Q_7$ from storyboard and keyframes, not audio | narration text is in the storyboard; frames carry layout |
+
+12.8 Performance (4 cores): `tests/test_pipeline.py` ≈ 16 s; real two-scene 320×240 render through the pool ≈ 7 s including two interpreter spawns.
 ## 13 Performance metrics
 
 | Item | Value |
