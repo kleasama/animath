@@ -68,7 +68,7 @@ def chunks(blocks: tuple[Block, ...], chars: int) -> list[list[Block]]:
 def prompt(doc: DocIR, part: list[Block], known: list[Node]) -> str:
     head = [f"Document: {doc.title}"]
     if doc.macros:
-        head += ["Macros:", *doc.macros.values()]
+        head += ["Macros:", *(doc.macros[k] for k in sorted(doc.macros))]
     if known:
         head += ["Known nodes:", *(f"{n.id} ({n.kind}): {n.name}" for n in known)]
     return "\n".join([*head, "Blocks:", *map(line, part)])

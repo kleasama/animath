@@ -20,6 +20,9 @@ _BIBITEM = re.compile(r"\\bibitem\s*(?:\[[^\]]*\])?\s*\{([^}]*)\}")
 _BIBFILES = re.compile(r"\\(?:bibliography|addbibresource)\s*\{([^}]*)\}")
 _FIELD = re.compile(r"(\w+)\s*=\s*")
 _NEWTHM = re.compile(r"\\newtheorem\*?\s*\{([^}]*)\}")
+_COLTYPE = re.compile(r"\\newcolumntype\s*\{(\S)\}\s*(?:\[(\d)\]\s*)?(?=\{)")
+_TABULAR = re.compile(r"\\begin\{(?:tabular|array|longtable)\}\s*(?:\[[^\]]*\]\s*)?(?=\{)")
+_CS = re.compile(r"\\(?:[A-Za-z]+|.?)", re.S)
 _ALG = re.compile(r"\\begin\{(algorithm\*?|algorithmic)\}.*?\\end\{\1\}", re.S)
 _KW = {
     "state": "{}",
@@ -166,6 +169,46 @@ def steps(src: str) -> str:
     return "\n".join(lines)
 
 
+def _expand(spec: str, defs: Mapping[str, tuple[int, str]], depth: int = 0) -> str:
+    toks, i = [], 0
+    while i < len(spec):
+        if spec[i] == "{":
+            j = group(spec, i)
+        elif spec[i] == "\\":
+            j = i + len(_CS.match(spec, i)[0])  # type: ignore[index]
+        else:
+            j = i + 1
+        toks.append(spec[i:j])
+        i = j
+    out, k = [], 0
+    while k < len(toks):
+        t, k = toks[k], k + 1
+        if t in defs and depth < 8:
+            n, body = defs[t]
+            for a in range(1, n + 1):
+                while k < len(toks) and toks[k].isspace():
+                    k += 1
+                arg = toks[k] if k < len(toks) else ""
+                body, k = body.replace(f"#{a}", arg[1:-1] if arg[:1] == "{" else arg), k + 1
+            t = _expand(body, defs, depth + 1)
+        out.append(t)
+    return "".join(out)
+
+
+def columns(src: str) -> str:
+    """Source with \\newcolumntype letters expanded in tabular specs (pandoc ignores them)."""
+    defs = {
+        m[1]: (int(m[2] or 0), src[m.end() + 1 : group(src, m.end()) - 1])
+        for m in _COLTYPE.finditer(src)
+    }
+    out, i = [], 0
+    for m in _TABULAR.finditer(src) if defs else ():
+        j = group(src, m.end())
+        out += [src[i : m.end()], "{", _expand(src[m.end() + 1 : j - 1], defs), "}"]
+        i = j
+    return "".join([*out, src[i:]])
+
+
 def algorithms(src: str) -> tuple[str, list[tuple[str, str, str | None]]]:
     """Source with algorithm environments replaced by tokens; (latex, text, label) per token."""
     found: list[tuple[str, str, str | None]] = []
@@ -199,7 +242,7 @@ def parse(files: Mapping[str, bytes], entry: str) -> DocIR:
                 if p not in texts:
                     raise IngestError(f"missing bibliography {p!r}")
                 bib |= bibtex(texts[p])
-    src, algs = algorithms(_THEBIB.sub("", src))
+    src, algs = algorithms(columns(_THEBIB.sub("", src)))
     return blocks.document(
         src,
         "latex",

@@ -134,3 +134,29 @@ def test_parse_bib_files_and_missing_bib() -> None:
     assert latex.parse(files, "m.tex").bib == {"k": "T"}
     with pytest.raises(IngestError, match=r"missing bibliography 'r\.bib'"):
         latex.parse({"m.tex": main}, "m.tex")
+
+
+def test_columns_expand_newcolumntype() -> None:
+    defs = (
+        r"\newcolumntype{Q}[1]{>{\raggedright\arraybackslash}p{#1}}"
+        r"\newcolumntype{Y}[1]{p{#1}}\newcolumntype{C}{>{\centering}Y{1cm}}\newcolumntype{R}{R}"
+    )
+    src = defs + r"\begin{tabular}[t]{@{}Q{0.2\textwidth} C|\vline Y 3 R@{}}a\end{tabular}"
+    assert latex.columns(src) == defs + (
+        r"\begin{tabular}[t]{@{}>{\raggedright\arraybackslash}p{0.2\textwidth} "
+        r">{\centering}p{1cm}|\vline p{3} R@{}}a\end{tabular}"
+    )
+    assert latex.columns(r"\begin{tabular}{Q}") == r"\begin{tabular}{Q}"
+
+
+def test_parse_keeps_table_labels() -> None:
+    main = (
+        r"\documentclass{article}\newcolumntype{Q}[1]{>{\raggedright\arraybackslash}p{#1}}"
+        r"\begin{document}See Table~\ref{tab:x}.\begin{table}\caption{Cap.}\label{tab:x}"
+        r"\begin{tabular}{@{}Q{2cm}Q{2cm}@{}}a & b \\ \end{tabular}\end{table}\end{document}"
+    )
+    doc = latex.parse({"m.tex": main.encode()}, "m.tex")
+    assert [(b.text, b.label, b.refs) for b in doc.blocks] == [
+        ("See Table tab:x.", None, ("tab:x",)),
+        ("Cap. a b", "tab:x", ()),
+    ]

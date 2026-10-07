@@ -37,8 +37,8 @@ Legend: ✓ done · ✱ in progress · ○ open · ⏸ checkpoint (review, commi
 | ⏸ C4 | Scene generation and pipeline review (auto-approved); integrated | ✓ |
 | 5.1 | WP9 orchestrator, resume, parallel scenes | ✓ |
 | 5.2 | WP9 evaluation harness ($Q_1$–$Q_7$) | ✓ |
-| 5.3 | WP9 end-to-end on golden set (live, needs `ANIMATH_API_KEY`) | ○ |
-| ⏸ C5 | Release v0.1 | ○ |
+| 5.3 | WP9 end-to-end on golden set (session mode) | ✓ |
+| ⏸ C5 | Release v0.1 | ✓ |
 
 ## Notes
 
@@ -54,14 +54,20 @@ Legend: ✓ done · ✱ in progress · ○ open · ⏸ checkpoint (review, commi
 | 2.4 | SymPy equivalence check deferred to WP9; pandoc 3.9 bundled via `pypandoc-binary` (subprocess). |
 | C2 | PRs #1–#5 merged. 220 tests, 100% line+branch coverage, mypy strict, licences clean. For WP7/WP8: complex data refs need `part` ∈ {abs, real, imag}; the planner receives the primitive catalog as an argument (Rule 6.2). |
 | C3 | PRs #7, #8 merged. 286 tests, 100% line+branch coverage. For WP9: pass `scene.catalog()` and the numerics kernel schemas into `plan.run`; planner depends on `jsonschema`. |
+| 5.3 | Session mode (`llm = session`, PR #12); streamed API calls (PR #11). Golden set at 1080p60, espeak-ng: Q1–Q5 pass on EFIE, Gauss, GMRES; Q6 Gauss 0.153 > 0.1; Q7 4.0–4.5; N1 0.12–0.55. |
+| C5 | v0.1 = main after PRs #11–#14. 377 tests, 100% line+branch coverage. |
 | C4 | PRs #9, #10 merged. `scene.animate` returns `(SceneRender, Usage)` and is the pipeline default; `pipeline.render_only` is the no-LLM path. 362 tests, 100% line+branch coverage. |
 
 ## Open questions
 
 | # | Question | Default |
 |---|---|---|
-| O1 | API key in the environment | `ANTHROPIC_API_KEY` is reserved by the platform and not passed to sessions; rename to `ANIMATH_API_KEY` (read first since 2026-10-07) |
+| O1 | API key in the environment | `ANIMATH_API_KEY` visible to sessions; API account lacks credit, so live runs use session mode |
 
 ## Known bugs
 
-None.
+| # | Bug | Owner |
+|---|---|---|
+| B1 | N1 < 1: planner shows worked values and steps absent from the source | Animation flow and pacing (source values via numerics requests) |
+| B2 | Gauss narration 15% over budget (Q6) | Natural narration voice |
+| B3 | Repair memo key omits the model tag | integrator |
