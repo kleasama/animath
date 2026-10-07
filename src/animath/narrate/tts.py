@@ -128,10 +128,11 @@ class Kokoro:
     """Kokoro-82M v1.0 ONNX, release `model-files-v1.0` of thewh1teagle/kokoro-onnx.
 
     `root` holds `kokoro-v1.0.onnx`, `voices-v1.0.bin` (npz, voice -> 510 x 1 x 256 float32) and
-    `config.json` (key `vocab`). Word spans come from the predicted token durations.
+    `config.json` (key `vocab`). Word spans come from the predicted token durations. Speech runs at
+    about `wpm_per_speed` * speed words per minute, pauses included.
     """
 
-    rate, hop, max_tokens, headroom = 24000, 600, 510, 0.5
+    rate, hop, max_tokens, headroom, wpm_per_speed = 24000, 600, 510, 0.5, 165
     model, voices, durations = "kokoro-v1.0.onnx", "voices-v1.0.bin", "/encoder/Clip_output_0"
 
     def __init__(
