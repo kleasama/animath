@@ -91,6 +91,9 @@ def test_tree_on_degenerate_sets() -> None:
     assert same.size[nodes(3)].tolist() == [1, 1, 1, 1, 1, 1, 1, 2]
     wide = cluster_tree(points("plate", 64)[0] * [2.0, 1.0], 32)
     assert wide.hi[1, 0] < wide.lo[2, 0]
+    for x, leaf in ((np.zeros((4, 2)), 1), (np.zeros((4, 2)), 0), (np.zeros((0, 2)), 4)):
+        with pytest.raises(ValueError, match="leaf >= 2 and points"):
+            cluster_tree(x, leaf)
 
 
 def test_partition_covers_every_pair_once_with_admissible_far_pairs() -> None:
@@ -235,6 +238,18 @@ def test_nonsymmetric_and_single_precision_operators() -> None:
     assert error(A32, tree, near, far, 1e-5) < 1e-5
 
 
+def test_cluster_without_far_field_is_eliminated_whole() -> None:
+    tree, near, far = plate(32, 64)
+    t, A = nodes(3)[0], helmholtz(tree)
+    for s in set(nodes(3)) - set(near[t]):
+        near[t].append(s)
+        near[s].append(t)
+    tr = factorise(A, tree, near, far, 1e-6)[1]
+    n, k, r = next(row[3:6] for row in tr.stage if row[0] == t)
+    assert (k, r) == (0, n)
+    assert error(A, tree, near, far, 1e-6) <= 1e-6
+
+
 def test_trace_bookkeeping() -> None:
     tree, near, far = plate(32, 64)
     fac, tr = factorise(helmholtz(tree), tree, near, far, 1e-6)
@@ -283,7 +298,10 @@ def test_kernel_validation() -> None:
     for bad in ({"n": 200}, {"kappa": -1.0}, {"precision": "half"}, {"tol": float("nan")}):
         with pytest.raises(ValidationError):
             RssLu.model_validate(bad)
+    with pytest.raises(ValidationError, match=r"tol < 10 eps = 1\.2e-06 of single precision"):
+        RssLu(tol=1e-6)
     assert RssLu(geometry="sphere", n=200).n == 200
+    assert RssLu(tol=1e-6, precision="double").tol == 1e-6
 
 
 def test_kernel_arrays_are_consistent() -> None:

@@ -288,7 +288,7 @@ def draw(
                 xm, ym = bl + (br - bl) * w.k(t) / w.n0(t), bb + (bt - bb) / 4
                 out["psplit", t, 0] = Spec(bl, bb, xm, ym, BLUE.to_hex(), 1.0, z=2)
                 out["psplit", t, 1] = Spec(xm, bb, br, ym, RED.to_hex(), 1.0, z=2)
-        for t, f in st.marks:
+        for t, f in sorted(st.marks):
             if f == "select":
                 out["psel", t] = Spec(*box(t), lo, 0.0, hi, 6.0, 4)
             for s in w.near[t] if f == "footprint" else []:
@@ -350,7 +350,7 @@ def draw(
                 out["near", t, s] = Spec(
                     *rect(*span(t), *span(s)), ORANGE.to_hex(), 1.0, BLACK.to_hex(), 0.5, 4
                 )
-        for t, f in st.marks:
+        for t, f in sorted(st.marks):
             if f == "select":
                 out["osel", t, 0] = Spec(*rect(*span(t), 0, N), lo, 0.0, hi, 4.0, 6)
                 out["osel", t, 1] = Spec(*rect(0, N, *span(t)), lo, 0.0, hi, 4.0, 6)

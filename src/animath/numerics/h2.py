@@ -56,6 +56,8 @@ def cluster_tree(x: F64, leaf: int) -> Tree:
     """Balanced binary tree of depth d = min{d : leaf 2^d >= N}: rank-median cuts on the axis
     minimising the larger child diameter (first minimiser); tight bounding boxes."""
     n = len(x)
+    if leaf < 2 or not n:
+        raise ValueError(f"cluster_tree needs leaf >= 2 and points, got leaf={leaf}, n={n}")
     d = next(k for k in count() if leaf << k >= n)
     begin, size = np.zeros(2 ** (d + 1) - 1, np.int64), np.zeros(2 ** (d + 1) - 1, np.int64)
     perm, size[0] = np.arange(n), n
@@ -192,16 +194,16 @@ class Factor(NamedTuple):
 
     def solve(self, g: Matrix) -> Matrix:
         """Forward sweep (shear, eliminate, pivot), dense top, backward sweep in reverse."""
-        y = g.astype(np.result_type(g, self.lu[0]))
+        y = g.astype(np.result_type(g, self.lu[0])).reshape(len(g), -1)
         for s in self.stages:
-            y[s.R] -= s.T.T @ y[s.S]
-            y[s.J] -= s.L21 @ y[s.R]
+            y[s.R] -= _mm(s.T, y[s.S], trans_a=1)
+            y[s.J] -= _mm(s.L21, y[s.R])
             y[s.R] = _solve(s.lu, y[s.R])
         y[self.top] = _solve(self.lu, y[self.top])
         for s in reversed(self.stages):
-            y[s.R] -= s.U12 @ y[s.J]
-            y[s.S] -= s.T @ y[s.R]
-        return y
+            y[s.R] -= _mm(s.U12, y[s.J])
+            y[s.S] -= _mm(s.T, y[s.R])
+        return y.reshape(g.shape)
 
 
 class Trace(NamedTuple):
@@ -378,9 +380,12 @@ class RssLu(Kernel):
     seed: int = Field(0, ge=0)
 
     @model_validator(mode="after")
-    def _grid(self) -> Self:
+    def _valid(self) -> Self:
         if self.geometry == "plate" and isqrt(self.n) ** 2 != self.n:
             raise ValueError("a plate needs n = m^2 points")
+        eps = np.finfo(np.float32 if self.precision == "single" else np.float64).eps
+        if self.tol < 10 * eps:
+            raise ValueError(f"tol < 10 eps = {10 * eps:.1e} of {self.precision} precision")
         return self
 
     def run(self) -> Result:
