@@ -56,7 +56,8 @@ Legend: ✓ done · ✱ in progress · ○ open · ⏸ checkpoint (review, commi
 | C3 | PRs #7, #8 merged. 286 tests, 100% line+branch coverage. For WP9: pass `scene.catalog()` and the numerics kernel schemas into `plan.run`; planner depends on `jsonschema`. |
 | 5.3 | Session mode (`llm = session`, PR #12); streamed API calls (PR #11). Golden set at 1080p60, espeak-ng: Q1–Q5 pass on EFIE, Gauss, GMRES; Q6 Gauss 0.153 > 0.1; Q7 4.0–4.5; N1 0.12–0.55. |
 | C5 | v0.1 = main after PRs #11–#14. 377 tests, 100% line+branch coverage. |
-| v0.2 | PRs #15–#17: Kokoro sentence narration with model word timings, gain and limiter loudness; `h2.rss` RS-S kernel, `hierarchy` primitive, `data.npz` arrays pinned by SHA-256; written-maths captions. 517 tests, 100% line+branch coverage. Pending: #18 pacing, narration of `Line.pause_s` and `Params.wpm`. |
+| v0.2 | PRs #15–#17: Kokoro sentence narration with model word timings, gain and limiter loudness; `h2.rss` RS-S kernel, `hierarchy` primitive, `data.npz` arrays pinned by SHA-256; written-maths captions. 517 tests, 100% line+branch coverage. |
+| v0.3 | PRs #18, #19: 135 wpm pacing with `Line.pause_s` holds honoured by narration and voice speed from `Params.wpm`; word-timed actions on named parts; repeat loops with speed-up; resumable views; `code` primitive in the planner; byte-identical clips (x264 `mbtree=0`). 588 tests, 100% line+branch coverage. |
 | C4 | PRs #9, #10 merged. `scene.animate` returns `(SceneRender, Usage)` and is the pipeline default; `pipeline.render_only` is the no-LLM path. 362 tests, 100% line+branch coverage. |
 
 ## Open questions
