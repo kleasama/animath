@@ -491,13 +491,13 @@ kept if it exists and a visual is alive; at most 8, evenly subsampled. A visual 
 | `Kokoro` (SPEC Q6) | 24 kHz | voice `af_heart`, speed 0.85 | verified with the weights above |
 | `Espeak` (no `ANIMATH_KOKORO`) | 22.05 kHz | `en-us`, 140 wpm | verified; last resort |
 
-Other voices of the file: `am_michael` (US), `bf_emma`, `bm_george` (GB; prefix `b` selects `en-gb` phonemes), and the rest of the Kokoro v1.0 list. The `voice` parameter selects one (§12.1).
+Other voices of the file: `am_michael` (US), `bf_emma`, `bm_george` (GB; prefix `b` selects `en-gb` phonemes), and the rest of the Kokoro v1.0 list. The `voice` parameter selects one (§12.1). `pipeline.voice` sets the rate from `wpm`: Kokoro speed $\sigma = \text{wpm}/165$ to 3 decimals (§10.5; 135 wpm gives 0.818), espeak-ng `-s wpm`. Without `ANIMATH_KOKORO`, a Kokoro voice name (`af_heart`) falls back to espeak-ng's default voice.
 
 10.3 Cache key. With $v$ the stage version,
 $$k = d\big(["\text{narrate}", v, d(\text{id}, \text{narration}), \text{tts.id}, \text{verbalizer.id}]\big). \tag{10.1}$$
 `tts.id` = `kokoro:` model SHA-256 prefix, voice, speed, $d$(lexicon, word list, phoneme map, vocab, voice style); `verbalizer.id` = `sre:` domain, $d$(`TEX`, `SPEECH`). Edits to visuals, math or duration of a scene do not trigger re-synthesis; edits to any pronunciation table do. `written` and the `align` constants are covered by $v$.
 
-10.4 Sentences. Lines are joined until one ends in `.`, `!` or `?` (closing quotes and brackets allowed after it); each sentence is one `synth` call, so intonation runs across line boundaries. A bookmark is the index of its line's first word within the sentence.
+10.4 Sentences. Lines are joined until one ends in `.`, `!` or `?` (closing quotes and brackets allowed after it) or has a pause `pause_s` $> 0$; each such utterance is one `synth` call, so intonation runs across line boundaries, and carries the pause $p$ of its last line. A bookmark is the index of its line's first word within the utterance.
 
 **Algorithm 10.1 (Kokoro synthesis).** Input: words $w_1,\dots,w_n$ of a sentence.
 1. Phonemes $p_i$ by Algorithm 10.2. Leading and trailing punctuation $o_i, c_i$ of $w_i$ stays in the token stream (`;:,.!?—…"()“”`): Kokoro renders it as pauses and intonation.
@@ -518,15 +518,15 @@ The extra output is added by editing the serialized `ModelProto` (field 7 graph,
 
 $p_i$ is the in-context pronunciation of $w_i$, non-empty for every pronounced word, so (10.2) gives every word a positive span.
 
-**Algorithm 10.3 (timeline, `align.timeline`).** Rate $r$; sentences $k = 1,\dots,K$ with PCM $x_k$ and spans (10.2).
+**Algorithm 10.3 (timeline, `align.timeline`).** Rate $r$; utterances $k = 1,\dots,K$ with PCM $x_k$, spans (10.2) and pauses $p_k$.
 1. Bounds $[a_k, b_k)$: first to last 10 ms frame with RMS above $-60$ dBFS, widened by 50 ms, clamped; a silent sentence raises `NarrateError`.
 2. Raised-cosine fades of $m = 0.01r$ samples at both ends, gain $\frac12 - \frac12\cos\big(\pi (j+\frac12)/m\big)$, $j < m$.
-3. Layout: $L = 0.3$ s silence, each faded sentence followed by $G = 0.4$ s, the last gap replaced by $T = 0.6$ s. Offsets $o_1 = Lr$, $o_{k+1} = o_k + b_k - a_k + Gr$.
+3. Layout: $L = 0.3$ s silence, each faded utterance followed by $G + p_k$ with $G = 0.4$ s, the last gap replaced by $\max(T, p_K)$ with $T = 0.6$ s. Offsets $o_1 = Lr$, $o_{k+1} = o_k + b_k - a_k + (G + p_k)r$.
 4. Word times $\big(o_k + \operatorname{clip}(\text{span}, a_k, b_k) - a_k\big)/r$; a bookmark is the start of its word.
 
-Duration $= L + T + (K-1)G + \sum_k (b_k - a_k)/r$. Silence between sentences is $G$ plus both pads, ≈ 0.5 s; within a sentence only the model's own pauses occur.
+Duration $= L + \max(T, p_K) + \sum_{k<K} (G + p_k) + \sum_k (b_k - a_k)/r$. Silence between utterances is $G + p_k$ plus both pads, ≈ 0.5 s without a pause; within an utterance only the model's own pauses occur.
 
-10.5 Accuracy. Word times are the model's token durations, exact to one frame (25 ms); bookmarks are word starts, so $Q_3$ holds by construction. Measured on the §2.8 test narration (11 scenes, 789 words, `af_heart`, speed 0.85): 140 wpm overall, 151 wpm within sentences; Whisper base.en (offline) transcribed 92.7 % of the words verbatim, the rest spelling variants (*colour*, numerals).
+10.5 Accuracy. Word times are the model's token durations, exact to one frame (25 ms); bookmarks are word starts, so $Q_3$ holds by construction. Measured on the §2.8 test narration (11 scenes, 789 words, `af_heart`, speed 0.85): 140 wpm overall, 151 wpm within sentences, so wpm $\approx 165\,\sigma$ (`Kokoro.wpm_per_speed`; 0.9 gave 148); Whisper base.en (offline) transcribed 92.7 % of the words verbatim, the rest spelling variants (*colour*, numerals).
 
 10.6 Math speech and captions. `TEX` rewrites before SRE: `\mathcal H^2` → H two; two-digit subscripts spaced; upright superscript words read as words. `SPEECH` rewrites after SRE turn ClearSpeak into lecture style: powers $-1$, $T$, $-T$, $*$, $H$ → inverse, transpose, inverse transpose, star, Hermitian; *raised to the k power* → to the k; fractions and *divided by* → over; *the metric of x sub 2* → the 2 norm of x; *script l* → ell; *O of* → order; font words, parentheses and *sub* dropped; *comma dot dot dot comma* → up to; *negative* → minus; *is a member of* → in.
 
@@ -572,7 +572,7 @@ Why not linear `loudnorm`: its linear mode needs measured peak plus gain below t
 
 ## 12 Orchestration and evaluation
 
-12.1 Interface. `pipeline.Pipeline(settings, llm, tts, verbalizer, animate, fetch, check)`; `run(bundle, edit=None, part=None) -> Manifest | Paused`. One method per stage takes and returns artifacts; `animate` has the WP8 signature `(scene, data, narration, store, llm, params) -> (SceneRender, Usage)`, default `render_only` (primitive library, §9) until `scene.animate` lands. `tts(params)` defaults to `voice`: Kokoro at `$ANIMATH_KOKORO`, else espeak-ng; `voice = default` keeps the backend default.
+12.1 Interface. `pipeline.Pipeline(settings, llm, tts, verbalizer, animate, fetch, check)`; `run(bundle, edit=None, part=None) -> Manifest | Paused`. One method per stage takes and returns artifacts; `animate` has the WP8 signature `(scene, data, narration, store, llm, params) -> (SceneRender, Usage)`, default `render_only` (primitive library, §9) until `scene.animate` lands. `tts(params)` defaults to `voice`: Kokoro at `$ANIMATH_KOKORO`, else espeak-ng, both at `wpm` (§10.2); `voice = default` keeps the backend default.
 
 **Algorithm 12.1 (run).**
 1. $\mathcal D = \Phi_1(\mathcal S)$; if `part`, restrict $\mathcal D$ (Algorithm 12.2).

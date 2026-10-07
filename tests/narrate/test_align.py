@@ -36,20 +36,26 @@ def test_fade_is_raised_cosine_at_both_ends() -> None:
 
 
 def test_timeline_layout_words_and_marks() -> None:
-    u1 = ("ab cdefg,", {"m1": 0, "m2": 1}, tone(300, lead=200, tail=300), [(150, 260), (300, 600)])
-    u2 = ("x.", {"m3": 0, "end": 4}, tone(100, lead=60), [(0, 160)])
+    u1 = (
+        "ab cdefg,",
+        {"m1": 0, "m2": 1},
+        0.2,
+        tone(300, lead=200, tail=300),
+        [(150, 260), (300, 600)],
+    )
+    u2 = ("x.", {"m3": 0, "end": 4}, 1.0, tone(100, lead=60), [(0, 160)])
     audio, words, marks = timeline([u1, u2], RATE)
-    assert audio.size == 300 + 400 + 400 + 150 + 600
+    assert audio.size == 300 + 400 + 600 + 150 + 1000
     assert not audio[:300].any()
-    assert not audio[700:1100].any()
-    assert not audio[1250:].any()
+    assert not audio[700:1300].any()
+    assert not audio[1450:].any()
     assert max(abs(int(audio[300])), abs(int(audio[699]))) < 10
     assert [(w.text, w.start, w.end) for w in words] == [
         ("ab", 0.3, 0.41),
         ("cdefg,", 0.45, 0.7),
-        ("x.", 1.1, 1.25),
+        ("x.", 1.3, 1.45),
     ]
-    assert marks == {"m1": 0.3, "m2": 0.45, "m3": 1.1, "end": 1.1}
+    assert marks == {"m1": 0.3, "m2": 0.45, "m3": 1.3, "end": 1.3}
     n = Narration(
         scene_id="s",
         audio="0" * 64,
@@ -57,7 +63,9 @@ def test_timeline_layout_words_and_marks() -> None:
         words=tuple(words),
         bookmarks=marks,
     )
-    assert n.duration_s - n.words[-1].end == pytest.approx(0.6)
+    assert n.duration_s - n.words[-1].end == pytest.approx(1.0)
+    short = timeline([(*u2[:2], 0.3, *u2[3:])], RATE)[0]
+    assert short.size == 300 + 150 + 600
 
 
 def test_captions_time_written_tokens_by_their_spoken_words() -> None:

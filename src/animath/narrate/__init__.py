@@ -22,20 +22,25 @@ def key(scene: Scene, tts: TTS, verbalizer: Verbalizer) -> str:
     )
 
 
-def sentences(lines: Sequence[Line], said: Sequence[str]) -> list[tuple[str, dict[str, int]]]:
-    """Lines joined until one ends in . ! or ?; bookmark -> index of its line's first word."""
-    out: list[tuple[str, dict[str, int]]] = []
+def sentences(
+    lines: Sequence[Line], said: Sequence[str]
+) -> list[tuple[str, dict[str, int], float]]:
+    """Lines joined until one ends in . ! or ? or pauses, with that line's pause.
+
+    Bookmark -> index of its line's first word in the utterance.
+    """
+    out: list[tuple[str, dict[str, int], float]] = []
     words: list[str] = []
     cues: dict[str, int] = {}
     for ln, text in zip(lines, said, strict=True):
         if ln.bookmark:
             cues[ln.bookmark] = len(words)
         words += text.split()
-        if words and any(c in ".!?" for c in split(words[-1])[2]):
-            out.append((" ".join(words), cues))
+        if words and (ln.pause_s or any(c in ".!?" for c in split(words[-1])[2])):
+            out.append((" ".join(words), cues, ln.pause_s))
             words, cues = [], {}
     if words:
-        out.append((" ".join(words), cues))
+        out.append((" ".join(words), cues, 0.0))
     return out
 
 
@@ -54,7 +59,7 @@ def narrate(
 
     def one(scene: Scene, lines: list[list[tuple[str, str]]]) -> str:
         said = [" ".join(" ".join(s for _, s in t).split()) for t in lines]
-        utts = [(t, c, *tts.synth(t)) for t, c in sentences(scene.narration, said)]
+        utts = [(t, c, p, *tts.synth(t)) for t, c, p in sentences(scene.narration, said)]
         audio, words, marks = timeline(utts, tts.rate)
         n = Narration(
             scene_id=scene.id,
