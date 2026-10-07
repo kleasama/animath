@@ -139,3 +139,8 @@ def test_ast_errors(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_invalid_document() -> None:
     with pytest.raises(IngestError, match="unresolved refs"):
         blocks.document("See \\ref{nowhere}.", "markdown", "s", {}, {})
+
+
+def test_div_id_labels_first_block() -> None:
+    src = "::: {#d .unknown}\nInside.\n:::\n\n::: {#e}\n:::\n\nSee \\ref{d}."
+    assert doc(src) == [("paragraph", "Inside.", "d"), ("paragraph", "See d.", ("d",))]

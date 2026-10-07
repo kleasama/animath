@@ -10,7 +10,7 @@ from animath.ingest.check import Check, compile_errors
 from animath.ingest.pdf import Fetch, fetch_url
 from animath.llm import LLM
 
-VERSION = "1"
+VERSION = "2"
 __all__ = ["VERSION", "Check", "Fetch", "compile_errors", "fetch_url", "run"]
 
 

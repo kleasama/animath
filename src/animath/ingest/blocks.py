@@ -229,7 +229,10 @@ class Builder:
                 elif cls == "proof":
                     self.container(BlockType.PROOF, c[1], env=cls, label=label)
                 else:
+                    n = len(self.out)
                     self.blocks(c[1])
+                    if label and n < len(self.out) and self.out[n].label is None:
+                        self.out[n] = self.out[n].model_copy(update={"label": label})
             elif t in ("BulletList", "OrderedList"):
                 self.container(BlockType.LIST, [b])
             elif t == "BlockQuote":
