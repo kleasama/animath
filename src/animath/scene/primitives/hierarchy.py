@@ -210,7 +210,7 @@ class Walk:
         )
 
 
-Flash = tuple[tuple[str, int], ...]
+Flash = tuple[tuple[str, *tuple[int, ...]], ...]
 
 
 def advance(w: Walk, st: State, s: Step) -> tuple[State, Flash]:
@@ -248,7 +248,7 @@ def advance(w: Walk, st: State, s: Step) -> tuple[State, Flash]:
     if s.do == "drop":
         if p.block is None or p.block not in shown(w, st):
             raise AnimateError(f"hierarchy: drop: {p.block} is not a fill block on view")
-        return replace(st, dropped=st.dropped | {p.block}), ()
+        return replace(st, dropped=st.dropped | {p.block}), (("drop", *p.block),)
     if s.do == "wave":
         rows = [i for i in w.rows(lvl) if st.phase.get(int(w.stage[i, 0]), 0) < FILL]
         c = p.colour if p.colour is not None else min((int(w.stage[i, 2]) for i in rows), default=0)
@@ -304,8 +304,9 @@ def draw(
             if SPLIT <= st.phase.get(t, 0) < ELIM:
                 bl, bb, br, bt = box(t)
                 xm, ym = bl + (br - bl) * w.k(t) / w.n0(t), bb + (bt - bb) / 4
+                rc = (RED if st.phase[t] < ZERO else WHITE).to_hex()
                 out["psplit", t, 0] = Spec(bl, bb, xm, ym, BLUE.to_hex(), 1.0, z=2)
-                out["psplit", t, 1] = Spec(xm, bb, br, ym, RED.to_hex(), 1.0, z=2)
+                out["psplit", t, 1] = Spec(xm, bb, br, ym, rc, 1.0, z=2)
         for t, f in sorted(st.marks):
             if f == "select":
                 out["psel", t] = Spec(*box(t), lo, 0.0, hi, 6.0, 4)
@@ -313,9 +314,11 @@ def draw(
                 out["pnear", t, s] = Spec(*box(s), lo, 0.2, lo, 3.0, 3)
             for u in w.ring(t) if f == "ring" else []:
                 out["pring", t, u] = Spec(*box(u), lo, 0.0, lo, 3.0, 3, True)
-        for kind, cls in flashes:
-            for t in (u for u in T if w.colour(u) == cls) if kind == "class" else []:
+        for kind, *x in flashes:
+            for t in [u for u in T if w.colour(u) == x[0]] if kind == "class" else []:
                 fl["pwave", t] = Spec(*box(t), hi, 0.5, hi, 4.0, 7)
+            for t in x if kind == "drop" else []:
+                fl["pdrop", t] = Spec(*box(t), AMBER, 0.5, AMBER, 4.0, 7)
         ncol = len({w.colour(t) for t in T if t in w.row})
         text = "dense top" if st.top else f"{ncol} colours" if ncol else "top level"
         out["pcap",] = Spec(
@@ -375,7 +378,12 @@ def draw(
             for s in w.near[t] if f == "footprint" else []:
                 out["onear", t, s, 0] = Spec(*rect(*span(s), 0, N), lo, 0.12, z=5)
                 out["onear", t, s, 1] = Spec(*rect(0, N, *span(s)), lo, 0.12, z=5)
-        for kind, t in flashes:
+        for kind, *x in flashes:
+            t = x[0]
+            if kind == "drop":
+                bl, bb, br, bt = rect(*span(t), *span(x[1]))
+                h, cx, cy = max(br - bl, bt - bb, 0.3) / 2, (bl + br) / 2, (bb + bt) / 2
+                fl["odrop", *x] = Spec(cx - h, cy - h, cx + h, cy + h, AMBER, 0.0, AMBER, 4.0, 7)
             if kind == "rotate":
                 fl["rot", t, 0] = Spec(*rect(*span(t), 0, N), lo, 0.6, z=7)
                 fl["rot", t, 1] = Spec(*rect(0, N, *span(t)), lo, 0.6, z=7)

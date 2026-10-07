@@ -4,7 +4,7 @@ from typing import Any
 import av
 import numpy as np
 import pytest
-from manim import Animation, DashedVMobject, Text, Wait
+from manim import BLUE, RED, WHITE, Animation, DashedVMobject, Text, Wait
 
 from animath.core.errors import AnimateError
 from animath.core.schemas import Params, Visual
@@ -186,8 +186,15 @@ def test_drop_coarsen_top(w: Walk) -> None:
     assert made == {(a, b) for a in w.near[t] for b in w.near[t] if b not in w.near[a]}
     assert shown(w, st) == made
     blk = min(made)
-    st, _ = advance(w, st, step("drop", block=blk))
-    assert shown(w, st) == made - {blk}
+    fb = draw(w, st, ("plate", "operator"))[0]["fill", *blk]
+    st, fl = advance(w, st, step("drop", block=blk))
+    assert (shown(w, st), fl) == (made - {blk}, (("drop", *blk),))
+    flash = draw(w, st, ("plate", "operator"), fl)[1]
+    assert set(flash) == {("pdrop", blk[0]), ("pdrop", blk[1]), ("odrop", *blk)}
+    sq = flash["odrop", *blk]
+    assert (sq.x1 - sq.x0, sq.y1 - sq.y0, fb.x1 - fb.x0) == pytest.approx((0.3, 0.3, 0.25))
+    assert sq.x0 + sq.x1 == pytest.approx(fb.x0 + fb.x1)
+    assert sq.y0 + sq.y1 == pytest.approx(fb.y0 + fb.y1)
     for bad in (None, blk):
         with pytest.raises(AnimateError, match="not a fill block on view"):
             advance(w, st, step("drop", block=bad))
@@ -268,6 +275,8 @@ def test_plate_split_bar(w: Walk) -> None:
     t = w.pick(4)[0]
     out = draw(w, walk(w, {"do": "split"})[0], ("plate",))[0]
     k, r = out["psplit", t, 0], out["psplit", t, 1]
+    assert (k.fill, r.fill) == (BLUE.to_hex(), RED.to_hex())
+    assert draw(w, walk(w, {"do": "zero"})[0], ("plate",))[0]["psplit", t, 1].fill == WHITE.to_hex()
     assert (k.x1 - k.x0) / (r.x1 - r.x0) == pytest.approx(w.k(t) / (w.n0(t) - w.k(t)))
     assert (k.x0, k.x1, r.x1) == pytest.approx((out["box", t].x0, r.x0, out["box", t].x1))
     done = draw(w, walk(w, {"do": "eliminate"})[0], ("plate",))[0]
