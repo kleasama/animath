@@ -168,8 +168,8 @@ a hit returns the stored graph with zero usage. The orchestrator passes `retries
 
 ## 7 Storyboard
 
-7.1 Interface. `plan.run(graph, params, catalog, store, llm, kernels=None) -> (Storyboard, Usage)` realizes $\Phi_3$. `catalog` maps primitive names to argument JSON schemas (`scene.catalog()`), `kernels` maps data kinds to parameter JSON schemas (`{k: K.model_json_schema() for k, K in numerics.KINDS.items()}`); both are passed by the orchestrator (Rule 6.2). With $\pi_3$ = (`duration_s`, `wpm`, `audience`, `focus`, `language`, `max_retries`),
-$$k_{\text{plan}} = d\big([\texttt{plan}, v, d(\mathcal{K}), d([\pi_3, \text{catalog}, \text{kernels}])]\big). \tag{7.1}$$
+7.1 Interface. `plan.run(graph, params, catalog, store, llm, kernels=None, speaker=None) -> (Storyboard, Usage)` realizes $\Phi_3$. `catalog` maps primitive names to argument JSON schemas (`scene.catalog()`), `kernels` maps data kinds to parameter JSON schemas (`{k: K.model_json_schema() for k, K in numerics.KINDS.items()}`), `speaker` (a `Speaker`: `id` and `lines`, the narration's `Verbalizer`) gives the spoken form of lines; all are passed by the orchestrator (Rule 6.2). With $\pi_3$ = (`duration_s`, `wpm`, `audience`, `focus`, `language`, `max_retries`),
+$$k_{\text{plan}} = d\big([\texttt{plan}, v, d(\mathcal{K}), d([\pi_3, \text{catalog}, \text{kernels}, \text{speaker.id}])]\big). \tag{7.1}$$
 
 | Module | Content |
 |---|---|
@@ -185,13 +185,13 @@ $$k_{\text{plan}} = d\big([\texttt{plan}, v, d(\mathcal{K}), d([\pi_3, \text{cat
 
 7.2 Draft. The model returns `Draft`: scenes with `narration`, an optional `loop` and `after` lines, visuals (`args` a JSON string), data requests (`params` a JSON string), node ids, symbols. A line (`DLine`) carries `text`, `bookmark`, `pause` (s) and `actions` $(\texttt{visual}, \texttt{do}, \texttt{parts}, \texttt{word}, \texttt{color})$; a loop (`DLoop`) carries items `over`, first-pass `lines`, `brief` lines and `speedup` $s$ (default 2). JSON strings keep the output schema closed for structured outputs. The prompt carries audience, $T$, `wpm`, scene target $\max(1, \operatorname{round}(T/40))$, word target $\operatorname{round}(0.85\,\rho T)$ with $\rho$ = `wpm`/60, seeds, selected nodes and edges, catalog, kernels.
 
-7.3 Pacing. A token is a TeX control word or an alphanumeric run; tokens in inline math weigh 1.5. With $w(\ell)$ the weighted tokens of line $\ell$, its speech lasts $s_\ell = w(\ell)/\rho$ and its slot is
-$$\sigma_\ell = s_\ell + p_\ell + g\,[\ell \text{ not last}], \qquad g = 0.35\ \text{s}, \tag{7.2}$$
-with pause $p_\ell$; a line on which a visual enters, and the last line, hold $p_\ell \ge 1$ s. Scene $i$ is estimated at $E_i = \sum_\ell \sigma_\ell$, $E = \sum_i E_i$. The draft is admissible only if
+7.3 Pacing. Line $\ell$ of $n_\ell$ spoken words lasts $s_\ell = n_\ell/\rho$. $n_\ell$ counts the words of `speaker.lines`, one call for all lines of a draft; without a speaker it is estimated: a token is a TeX control word or an alphanumeric run, tokens in inline math weigh 1.5. The slot of $\ell$ is
+$$\sigma_\ell = s_\ell + p_\ell + g\,[\ell \text{ ends an utterance and is not last}], \qquad g = 0.35\ \text{s}, \tag{7.2}$$
+with pause $p_\ell$; as in the narration (§10.4), a line ends an utterance if it ends in `.`, `!` or `?` (closing quotes and brackets allowed) or $p_\ell > 0$. A line on which a visual enters, and the last line, hold $p_\ell \ge 1$ s. Scene $i$ is estimated at $E_i = L + \sum_\ell \sigma_\ell$ with lead $L = 0.4$ s, $E = \sum_i E_i$. The draft is admissible only if
 $$\lvert E - T \rvert \le 0.1\,T, \tag{7.3}$$
 and scene durations follow the estimate,
 $$d_i = T\,E_i / E, \qquad \textstyle\sum_i d_i = T, \tag{7.4}$$
-rounded to 1 ms. The narration speaks at `wpm` with the same gaps and pauses, so (7.3) bounds $Q_6$ up to the token estimate. Line onsets $o_\ell = \sum_{k<\ell} \sigma_k$; a `word` at plain-word position $j$ of $n$ fires at $o_\ell + s_\ell j/n$. Its action carries `frac` $= s_\ell j/(n\,\sigma_\ell)$ (at most 0.99), so without a narration time for the word the renderer fires it at the same fraction of the spoken slot (§9.6).
+rounded to 1 ms. The narration speaks the same words at `wpm` with the same lead, gaps and pauses, so $E$ is its length (10.6) and (7.3) bounds $Q_6$ up to the rounding of the speed. Line onsets $o_\ell = L + \sum_{k<\ell} \sigma_k$; a `word` fires at $o_\ell + s_\ell \phi$, $\phi$ the share of the line's weighted tokens before it. Its action carries `frac` $= s_\ell \phi/\sigma_\ell$ (at most 0.99), so without a narration time for the word the renderer fires it at the same fraction of the spoken slot (§9.6).
 
 **Algorithm 7.4 (script).**
 1. Lines of `narration`, then the loop's `lines` with `{}` replaced by the first item (text and parts), then one line per `brief` entry, then `after`. Lines without a bookmark get `#k`, $k$ the line index. Each action becomes `Action{at: bookmark, word, do, parts, color}` of its visual.
@@ -239,6 +239,7 @@ Brief lines map one to one onto passes (`{}` replaced by the item), or one brief
 | P9 | Motion check at 7 s on estimates, 8 s on renders (§9.12) | catch static stretches before rendering; the render check has the real timing |
 | P10 | A view continues its last visual even after a gap, re-entering with the replayed state | a view gives way to a zoom and returns unchanged |
 | P11 | Word actions also carry their estimated fraction of the slot | without word times the action still fires near its word, not at the line start |
+| P12 | Spoken words from the narration's verbalizer, and its lead and gaps | the estimate is the narration's length; weighted tokens misjudge formulas: $\int_{-1}^{1} f(x)\,dx$ is read in 12 words, weighted 9 |
 
 7.7 Performance: `tests/plan` ≈ 5 s on 4 cores (dominated by importing `scene` for the real catalog).
 ## 8 Numerics

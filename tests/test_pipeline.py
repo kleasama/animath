@@ -48,7 +48,7 @@ def words(n: int, tag: str) -> str:
 
 
 def plan_draft() -> Draft:
-    """Valid storyboard for the efie golden graph at T = 12 s: 9 + 12 words at 135 wpm."""
+    """Valid storyboard for the efie golden graph at T = 12 s: 9 + 10 words at 135 wpm."""
     eq = json.dumps({"latex": EQ["b2"]})
     return Draft(
         title="EFIE",
@@ -66,7 +66,7 @@ def plan_draft() -> Draft:
             DScene(
                 id="s2",
                 goal="discretize",
-                narration=[DLine(text=words(12, "moment"))],
+                narration=[DLine(text=words(10, "moment"))],
                 visuals=[DVisual(primitive="text", args='{"text": "Galerkin"}')],
                 math=[EQ["b2"]],
                 data=[DData(kind="quadrature.rule", params='{"n": 3}')],

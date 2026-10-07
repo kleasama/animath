@@ -14,9 +14,11 @@ SYSTEM = """Plan an educational math video as a storyboard of scenes, in teachin
 Rules:
 1. Each scene: unique id, one-sentence goal, narration lines, at least one visual,
    the node ids it teaches.
-2. Narration is spoken prose, one sentence or clause per line; inline math as $...$.
-   Speech runs at `wpm` words per minute, with 0.35 s between lines and each line's
-   `pause` after it; the estimated total must match `duration_s` within 10%.
+2. Narration is spoken prose, one sentence or clause per line; inline math as $...$,
+   timed as read aloud ($\\int_{-1}^{1} f(x)\\,dx$: "the integral from minus 1 to 1 of
+   f of x d x"). Speech runs at `wpm` words per minute, with 0.4 s before a scene's first
+   line, 0.35 s after each line that ends a sentence (. ! ?) or has a `pause`, and each
+   line's `pause` after it; the estimated total must match `duration_s` within 10%.
 3. Motion: something on screen changes at least every 7 s while the narration goes on.
    A line's `actions` change visuals of its scene as it is spoken: `visual` is the
    index, `do` a verb of the visual's catalog entry, `parts` part selectors listed

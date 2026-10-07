@@ -1,4 +1,5 @@
 import json
+from collections.abc import Sequence
 
 import pytest
 from pydantic import JsonValue
@@ -36,6 +37,21 @@ def test_run_caches(
     assert again == (board, Usage())
 
 
+def test_run_keys_on_the_speaker(
+    graph: KnowledgeGraph, store: Store, draft: Draft, cat: Cat, kernels: Cat
+) -> None:
+    class Speaker:
+        id = "sre:t"
+
+        def lines(self, texts: Sequence[str]) -> list[str]:
+            return list(texts)
+
+    p, sp = Params(duration_s=T), Speaker()
+    board, _ = run(graph, p, cat, store, Fake(draft), kernels)
+    assert run(graph, p, cat, store, Fake(draft), kernels, sp) == (board, Usage(input_tokens=7))
+    assert run(graph, p, cat, store, Fake(), kernels, sp) == (board, Usage())
+
+
 def test_repair_then_success(
     graph: KnowledgeGraph, store: Store, draft: Draft, cat: Cat, kernels: Cat
 ) -> None:
@@ -44,16 +60,16 @@ def test_repair_then_success(
     assert usage == Usage(input_tokens=14)
     assert fake.prompts[1].startswith(fake.prompts[0])
     assert fake.prompts[1].endswith(
-        "Errors:\nscene s2: nothing changes for 14 s from scene s2.narration[0]; add actions\n"
-        "estimated length 31 s at 135 words per minute with gaps and pauses, target 28 s within "
-        "10%: cut about 8 words"
+        "Errors:\nscene s2: nothing changes for 15 s from scene s2.narration[0]; add actions\n"
+        "estimated length 32 s at 135 words per minute with gaps and pauses, target 28 s within "
+        "10%: cut about 9 words"
     )
     assert board.duration_s == T
 
 
 def test_retries_exhausted(graph: KnowledgeGraph, store: Store, cat: Cat) -> None:
     fake = Fake(bad(), bad())
-    with pytest.raises(PlanError, match=r"after 1 repairs.*estimated length 31 s"):
+    with pytest.raises(PlanError, match=r"after 1 repairs.*estimated length 32 s"):
         run(graph, Params(duration_s=T, max_retries=1), cat, store, fake)
     assert not fake.outs
 

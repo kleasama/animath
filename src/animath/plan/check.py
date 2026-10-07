@@ -1,6 +1,6 @@
 import json
 import re
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from itertools import pairwise
 from typing import Any
@@ -15,11 +15,13 @@ from animath.plan.select import Selection
 TOKEN = re.compile(r"\\[A-Za-z]+|[^\W_]+")
 MATH = re.compile(r"\$[^$]*\$")
 SPOKEN = re.compile(r"\$[^$]*\$|\S+")
+END = re.compile(r"[.!?][\"'\u201d\u2019)\]]*\s*$")
 TOLERANCE = 0.1
 COVERAGE = 0.9
 OVERLAPS = {frozenset({"main", "left"}), frozenset({"main", "right"})}
 MATH_WEIGHT = 1.5
-GAP_S, HOLD_S, STEP_S, STATIC_S, PAUSE_MAX = 0.35, 1.0, 1.0, 7.0, 30.0
+LEAD_S, GAP_S, HOLD_S, STEP_S, STATIC_S, PAUSE_MAX = 0.4, 0.35, 1.0, 1.0, 7.0, 30.0
+Said = Callable[[Sequence[str]], Sequence[str]]
 
 
 def words(text: str) -> float:
@@ -27,6 +29,15 @@ def words(text: str) -> float:
     inline math."""
     math = sum(len(TOKEN.findall(m)) for m in MATH.findall(text))
     return len(TOKEN.findall(MATH.sub(" ", text))) + MATH_WEIGHT * math
+
+
+def spoken(d: Draft, wpm: int, said: Said | None) -> Callable[[str], float]:
+    """Spoken words of each line: `said` verbalizes every line of the draft in one call; without
+    it, the estimate `words`."""
+    if said is None:
+        return words
+    texts = list(dict.fromkeys(b.text for ds in d.scenes for b in script(ds, wpm, [], words)))
+    return dict(zip(texts, (len(s.split()) for s in said(texts)), strict=True)).__getitem__
 
 
 def norm(word: str) -> str:
@@ -62,9 +73,12 @@ def _act(a: DAction, at: str, item: str | None, **extra: Any) -> tuple[int, dict
     return a.visual, {k: v for k, v in x.items() if v is not None}
 
 
-def script(ds: DScene, wpm: int, errors: list[str]) -> list[Beat]:
-    """Algorithm 7.4: lines, loop passes and holds, with onsets estimated at `wpm`; a word
-    action also carries its estimated offset in the slot, the fallback without word times."""
+def script(
+    ds: DScene, wpm: int, errors: list[str], count: Callable[[str], float] = words
+) -> list[Beat]:
+    """Algorithm 7.4: lines, loop passes and holds, with onsets estimated at `wpm` from `count`
+    words per line; a word action also carries its estimated offset in the slot, the fallback
+    without word times."""
     where = f"scene {ds.id}"
     out: list[Beat] = []
 
@@ -108,9 +122,9 @@ def script(ds: DScene, wpm: int, errors: list[str]) -> list[Beat]:
     if out:
         out[-1].pause = max(out[-1].pause, HOLD_S)
     if briefs and lp is not None:
-        replay(out, lp.lines, lp.over, briefs, lp.speedup, wpm)
+        replay(out, lp.lines, lp.over, briefs, lp.speedup, wpm, count)
     else:
-        onsets(out, wpm)
+        onsets(out, wpm, count)
     for i, b in enumerate(out):
         if not 0.0 <= b.pause <= PAUSE_MAX:
             errors.append(f"{b.where}: pause {b.pause:.2f} s outside [0, {PAUSE_MAX:.0f}] s")
@@ -121,24 +135,32 @@ def script(ds: DScene, wpm: int, errors: list[str]) -> list[Beat]:
     return out
 
 
-def onsets(beats: list[Beat], wpm: int) -> None:
-    t = 0.0
+def onsets(beats: list[Beat], wpm: int, count: Callable[[str], float]) -> None:
+    t = LEAD_S
     for i, b in enumerate(beats):
-        b.speech, b.onset = words(b.text) * 60 / wpm, t
-        t += b.speech + b.pause + GAP_S * (i < len(beats) - 1)
+        b.speech, b.onset = count(b.text) * 60 / wpm, t
+        t += slot(beats, i)
 
 
 def slot(beats: list[Beat], i: int) -> float:
+    """Speech, pause, and the gap after an utterance end (. ! ? or a pause) before a line."""
     b = beats[i]
-    return b.speech + b.pause + GAP_S * (i < len(beats) - 1)
+    ends = b.pause > 0 or END.search(b.text) is not None
+    return b.speech + b.pause + GAP_S * (ends and i < len(beats) - 1)
 
 
 def replay(
-    beats: list[Beat], lines: list[DLine], over: list[str], briefs: list[Beat], s: float, wpm: int
+    beats: list[Beat],
+    lines: list[DLine],
+    over: list[str],
+    briefs: list[Beat],
+    s: float,
+    wpm: int,
+    count: Callable[[str], float],
 ) -> None:
     """Later passes replay the first pass's actions under the brief lines: pass q lasts
     D_q = max(D_1 / s^q, n STEP_S) (7.5), at rate D_1 / D_q."""
-    onsets(beats, wpm)
+    onsets(beats, wpm, count)
     i0 = beats.index(briefs[0]) - len(lines)
     d1 = sum(slot(beats, i) for i in range(i0, i0 + len(lines)))
     tau = [
@@ -152,8 +174,8 @@ def replay(
     for b, g in zip(briefs, groups, strict=True):
         i = beats.index(b)
         gap = GAP_S * (i < len(beats) - 1)
-        b.pause = max(b.pause, sum(dq[q] for q in g) - words(b.text) * 60 / wpm - gap)
-        onsets(beats, wpm)
+        b.pause = max(b.pause, sum(dq[q] for q in g) - b.speech - gap)
+        onsets(beats, wpm, count)
         width, offset = slot(beats, i), 0.0
         for q in g:
             for a, t in tau:
@@ -203,7 +225,7 @@ class Plan:
 
     @property
     def length(self) -> float:
-        return sum(slot(self.beats, i) for i in range(len(self.beats)))
+        return LEAD_S + sum(slot(self.beats, i) for i in range(len(self.beats)))
 
 
 Views = dict[str, tuple[str, dict[str, Any], bool]]
@@ -217,6 +239,7 @@ def plan(
     wpm: int,
     views: Views,
     errors: list[str],
+    count: Callable[[str], float] = words,
 ) -> Plan:
     """Algorithm 7.2, scene part: script, catalog, data, action, cue, region and node checks;
     a visual naming a view continues its last visual, taking over its args and state."""
@@ -231,7 +254,7 @@ def plan(
         elif kernels:
             _schema(kernels[d.kind], params, w, errors)
         data.append(DataRequest(kind=d.kind, params=params))
-    beats = script(ds, wpm, errors)
+    beats = script(ds, wpm, errors, count)
     marks = {b.bookmark: i for i, b in enumerate(beats)}
     acts: dict[int, list[tuple[int, dict[str, Any], str]]] = {}
     for i, b in enumerate(beats):
@@ -336,7 +359,7 @@ def static(p: Plan) -> list[str]:
     out = []
     for t0, t1 in pairwise(sorted([0.0, *at, *until, *acts, p.length])):
         if t1 - t0 > STATIC_S:
-            w = bs[max(k for k in range(n) if bs[k].onset <= t0 + 1e-9)].where
+            w = bs[max((k for k in range(n) if bs[k].onset <= t0 + 1e-9), default=0)].where
             out.append(
                 f"scene {p.ds.id}: nothing changes for {t1 - t0:.0f} s from {w}; add actions"
             )
@@ -350,16 +373,18 @@ def build(
     catalog: Schemas,
     kernels: Schemas,
     wpm: int = 135,
+    said: Said | None = None,
 ) -> tuple[Storyboard | None, list[str]]:
     """Algorithm 7.2: validated Storyboard with durations in proportion to the estimated
-    speech, gaps and pauses, or the errors."""
+    speech, gaps and pauses, or the errors; `said` gives the spoken form of lines."""
     if not d.scenes:
         return None, ["no scenes"]
+    count = spoken(d, wpm, said)
     errors: list[str] = []
     plans: list[Plan] = []
     views: Views = {}
     for ds in d.scenes:
-        p = plan(ds, sel, catalog, kernels, wpm, views, errors)
+        p = plan(ds, sel, catalog, kernels, wpm, views, errors, count)
         plans.append(p)
         views = {k: (v, a, False) for k, (v, a, _) in views.items()}
         views |= {a["view"]: (v, a, "until" not in a) for v, a, _ in p.visuals if "view" in a}

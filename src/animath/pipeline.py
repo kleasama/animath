@@ -275,7 +275,8 @@ class Pipeline:
     def plan(self, kg: KnowledgeGraph, params: Params) -> Storyboard:
         kernels = {k: K.model_json_schema() for k, K in numerics.KINDS.items()}
         with self._timed("plan", params):
-            return plan.run(kg, params, catalog(), self.store, self.llm, kernels)[0]
+            out = plan.run(kg, params, catalog(), self.store, self.llm, kernels, self.verbalizer)
+            return out[0]
 
     def compute(self, board: Storyboard) -> dict[str, DataSet]:
         reqs = {r.digest: r for s in board.scenes for r in s.data}
