@@ -351,7 +351,7 @@ Numerical arguments are literals or `ArrayRef` $(i, a)$: array $a$ of the `DataS
 | `field` | `values` $u_{ij}$ at $(x_j, y_i)$, $y$ upward | viridis heatmap | | |
 | `surface` | `points` $(n,3)$, `faces` $(m,3)$, `scalars` $(n)$ or $(m)$, `azimuth`, `elevation` | PyVista offscreen image | | |
 | `trace` | `lines` (plain text, not TeX), `steps` (line indices) | monospace listing, cursor at `steps[0]`; visits the others uniformly unless `goto` actions move it | `line:k` (0-based), `cursor` | `goto` |
-| `hierarchy` | `data`, `level`, `done`, `coloured`, `views` ⊆ {`plate`, `operator`}, `steps` (`do`, `part`) | cluster boxes, block operator in tree order (§9.15); step $i$ at $t_e + (i+1)(t_x-t_e)/(n+1)$ | | |
+| `hierarchy` | `data`, `level`, `done`, `coloured`, `views` ⊆ {`plate`, `operator`}, `steps` (`do`, `part`) | cluster boxes, block operator in tree order (§9.15); step $i$ at $t_e + (i+1)(t_x-t_e)/(n+1)$ | `t`, `s`, `cluster:k`, `colour:c`, `block:a:b` | the 15 board verbs of §9.15 |
 | `code` | `code` (§9.10) | generated | index paths | the snippet's `act` |
 
 Every primitive also accepts dotted index paths (`1.0`) as parts. A TeX part isolates every occurrence of the substring that cuts no control word (`t` is not isolated inside `\to`). Undelimited arguments of `^`, `_` and accent or font macros are braced first (`x^2` to `x^{2}`, `\hat x` to `\hat{x}`), since an isolation marker before such an argument breaks the TeX; cuts inside braces are safe.
