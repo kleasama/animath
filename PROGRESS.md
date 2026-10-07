@@ -29,9 +29,9 @@ Legend: ✓ done · ✱ in progress · ○ open · ⏸ checkpoint (review, commi
 | 2.8 | WP4 narrate: SRE verbalization, Kokoro and espeak-ng TTS, bookmark timeline, VTT | ✓ |
 | 2.9 | WP5 assemble: concat, loudnorm, encode, manifest | ✓ |
 | ⏸ C2 | Stage modules review (auto-approved); group B integrated | ✓ |
-| 3.1 | WP6 extract: $\mathcal{K}$ with provenance | ○ |
-| 3.2 | WP7 plan: subgraph selection, storyboard, symbol ledger, duration budget | ○ |
-| ⏸ C3 | Semantics review; integrate group C | ○ |
+| 3.1 | WP6 extract: $\mathcal{K}$ with provenance | ✓ |
+| 3.2 | WP7 plan: subgraph selection, storyboard, symbol ledger, duration budget | ✓ |
+| ⏸ C3 | Semantics review (auto-approved); group C integrated | ✓ |
 | 4.1 | WP8 codegen with retrieval, static gate | ○ |
 | 4.2 | WP8 repair loop, critic, pitfall memory | ○ |
 | ⏸ C4 | Scene generation review | ○ |
@@ -53,6 +53,7 @@ Legend: ✓ done · ✱ in progress · ○ open · ⏸ checkpoint (review, commi
 | 2.8 | Per-line synthesis replaces forced alignment (HANDBOOK 10.7). Kokoro untested with real weights: Hugging Face blocked in containers. |
 | 2.4 | SymPy equivalence check deferred to WP9; pandoc 3.9 bundled via `pypandoc-binary` (subprocess). |
 | C2 | PRs #1–#5 merged. 220 tests, 100% line+branch coverage, mypy strict, licences clean. For WP7/WP8: complex data refs need `part` ∈ {abs, real, imag}; the planner receives the primitive catalog as an argument (Rule 6.2). |
+| C3 | PRs #7, #8 merged. 286 tests, 100% line+branch coverage. For WP9: pass `scene.catalog()` and the numerics kernel schemas into `plan.run`; planner depends on `jsonschema`. |
 
 ## Open questions
 
