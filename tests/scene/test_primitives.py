@@ -41,6 +41,18 @@ def test_array_resolution(store: Store) -> None:
         Context(ctx.scene, store, {}, 1.0).array(ArrayRef(data=0, array="a"))
 
 
+def test_complex_parts(store: Store) -> None:
+    ctx = context(store, z=np.array([3 + 4j, -1j]))
+    parts = {
+        k: ctx.real(ArrayRef(data=0, array="z", part=k)).tolist() for k in ("abs", "real", "imag")
+    }
+    assert parts == {"abs": [5.0, 1.0], "real": [3.0, 0.0], "imag": [4.0, -1.0]}
+    with pytest.raises(AnimateError, match=r"complex array .*set part"):
+        ctx.real(ArrayRef(data=0, array="z"))
+    with pytest.raises(AnimateError, match="set part"):
+        build("plot", ctx, series=[{"x": [0, 1], "y": ref("z")}])
+
+
 @pytest.mark.parametrize("payload", [b"not npy", "npz"])
 def test_array_unreadable(store: Store, payload: bytes | str) -> None:
     import io

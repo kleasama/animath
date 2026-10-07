@@ -49,7 +49,7 @@ class Field(Primitive[FieldArgs]):
     args = FieldArgs
 
     def build(self, a: FieldArgs, ctx: Context, cell: Box) -> Mobject:
-        z = ctx.array(a.values)
+        z = ctx.real(a.values)
         if z.ndim != 2:
             raise AnimateError(f"field needs a 2-D array, got shape {z.shape}")
         return raster(colorize(np.flipud(z)), cell)
@@ -62,7 +62,7 @@ class Surface(Primitive[SurfaceArgs]):
     args = SurfaceArgs
 
     def build(self, a: SurfaceArgs, ctx: Context, cell: Box) -> Mobject:
-        p, f, s = ctx.array(a.points), ctx.array(a.faces), ctx.array(a.scalars)
+        p, f, s = ctx.real(a.points), ctx.array(a.faces), ctx.real(a.scalars)
         if p.ndim != 2 or p.shape[1] != 3 or f.ndim != 2 or f.shape[1] != 3:
             raise AnimateError(
                 f"surface needs points (n, 3), faces (m, 3); got {p.shape}, {f.shape}"

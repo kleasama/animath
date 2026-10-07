@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from io import BytesIO
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Literal
 
 import numpy as np
 from manim import Animation, FadeIn, Mobject, VMobject, Write
@@ -16,10 +16,11 @@ from animath.scene.layout import Box, Region
 
 
 class ArrayRef(Model):
-    """Array `array` of the DataSet answering `scene.data[data]`."""
+    """Array `array` of the DataSet answering `scene.data[data]`, optionally mapped by `part`."""
 
     data: int = Field(ge=0)
     array: str
+    part: Literal["abs", "real", "imag"] | None = None
 
 
 Vector = list[float] | ArrayRef
@@ -53,7 +54,14 @@ class Context:
             raise AnimateError(f"{where}: unreadable: {e}") from e
         if not isinstance(out, np.ndarray):
             raise AnimateError(f"{where}: not a .npy array")
-        return out
+        return getattr(np, v.part)(out) if v.part else out
+
+    def real(self, v: Vector | Grid | ArrayRef) -> NDArray[np.float64]:
+        """Real float array; complex data must select `part`."""
+        out = self.array(v)
+        if np.iscomplexobj(out):
+            raise AnimateError(f"scene {self.scene.id}: complex array {v}; set part")
+        return out.astype(float)
 
 
 @dataclass(frozen=True)

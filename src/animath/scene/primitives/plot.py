@@ -66,7 +66,7 @@ class Plot(Primitive[PlotArgs]):
     def build(self, a: PlotArgs, ctx: Context, cell: Box) -> Mobject:
         data: list[tuple[NDArray[Any], NDArray[Any]]] = []
         for s in a.series:
-            x, y = ctx.array(s.x).astype(float), ctx.array(s.y).astype(float)
+            x, y = ctx.real(s.x), ctx.real(s.y)
             if x.ndim != 1 or x.shape != y.shape or len(x) < 2:
                 raise AnimateError(
                     f"plot series needs x, y of equal length >= 2: {x.shape}, {y.shape}"

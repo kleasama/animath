@@ -65,7 +65,7 @@ Algorithm 9.1 Scene generation: SPEC Algorithm 6.1.
 
 9.1 Modules. `scene.layout` (geometry, no Manim), `scene.primitives` (registry `PRIMITIVES`, `catalog()` of argument JSON schemas), `scene.render` (`timeline`, `compose`, `schedule`, `render`).
 
-9.2 Primitives. A `Visual` names a primitive and carries its arguments; every argument model extends `Args` with `region` (default `main`) and `until` (bookmark that removes the visual). Numerical arguments are literals or `ArrayRef` $(i, a)$: array $a$ of the `DataSet` answering `scene.data[i]`, stored as one `.npy` blob.
+9.2 Primitives. A `Visual` names a primitive and carries its arguments; every argument model extends `Args` with `region` (default `main`) and `until` (bookmark that removes the visual). Numerical arguments are literals or `ArrayRef` $(i, a)$: array $a$ of the `DataSet` answering `scene.data[i]`, stored as one `.npy` blob and loaded with `allow_pickle=False`. Complex arrays must select `part` $\in$ {`abs`, `real`, `imag`} wherever a real array is drawn (`plot`, `field`, `surface`); `matrix` takes complex input directly.
 
 | Primitive | Arguments | Visual | Cues |
 |---|---|---|---|
