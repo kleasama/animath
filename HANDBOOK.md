@@ -17,7 +17,7 @@ Reference for a developer at any pickup point.
 |---|---|
 | `make setup` | create `.venv` from `requirements.lock`, install package editable |
 | `make lock` | re-resolve pins from `pyproject.toml` |
-| `make check` | ruff, ruff format, mypy --strict, pytest (coverage ≥ 95%), licence audit |
+| `make check` | (also CI on push/PR) ruff, ruff format, mypy --strict, pytest (coverage ≥ 95%), licence audit |
 | `.venv/bin/animath schema <kind>` | JSON schema of an artifact kind |
 | `.venv/bin/animath inspect <kind> <digest>` | print a stored artifact |
 | `.venv/bin/animath config` | effective settings |
@@ -74,7 +74,7 @@ Algorithm 9.1 Scene generation: SPEC Algorithm 6.1.
 
 | # | Date | Decision | Reason |
 |---|---|---|---|
-| D1 | 2026-10-07 | Codebase stored in project Google Drive folder as git bundle | user choice; Drive cannot run git |
+| D1 | 2026-10-07 | Code in GitHub `kleasama/animath`; Drive holds documents and checkpoint bundles | parallel WPs need a git remote |
 | D2 | 2026-10-07 | C0 defaults accepted (SPEC §8) | user approval |
 | D3 | 2026-10-07 | CPU-only toolchain; GPU parsers replaced by Claude vision transcription | no GPU in containers |
 | D4 | 2026-10-07 | Schemas frozen at C1; changes only through integrator | parallel WPs without conflicts |

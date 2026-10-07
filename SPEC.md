@@ -185,20 +185,20 @@ Granular steps live in `PROGRESS.md`. Each work package (WP) is one thread, owns
 | 8 | Codegen, repair loop, critic | `scene/codegen.py`, `scene/repair.py`, `scene/critic.py` | 3, 7 | D | C4 |
 | 9 | Orchestrator, CLI `run`/`stage`, evaluation harness, end-to-end on golden set | `pipeline.py`, `eval/`, `cli.py` | all | E | C5 |
 
-Groups run sequentially $A\to B\to C\to D\to E$; WPs within a group run in parallel without shared files. Changes to `core/`, `llm/`, root files, or the Dockerfile after C1 are requested from the integrator, never edited in a WP branch. New dependencies are declared in the WP's handoff note and added by the integrator.
+Groups run sequentially $A\to B\to C\to D\to E$; WPs within a group run in parallel without shared files. Changes to `core/`, `llm/`, root files (except dependency pins, §7.2), the Dockerfile, or CI after C1 are requested from the integrator, never edited in a WP branch.
 
-### 7.2 Code exchange (Drive, no git server)
+### 7.2 Code exchange
 
-1. The Drive folder holds `animath.bundle` (full history of `main`) and the three documents.
-2. A WP thread clones `animath.bundle`, works on branch `wp<N>`, and uploads `wp<N>.bundle` plus a handoff note (new dependencies, schema requests).
-3. The integrator merges the group's branches into `main` at the checkpoint, runs `make check`, uploads the new `animath.bundle`, and trashes superseded bundles.
-4. Drive content cannot be edited in place: replacement is trash + create.
+1. Code lives in the private GitHub repository `kleasama/animath`; `main` is protected by convention: only the integrator merges.
+2. A WP thread branches `wp<N>-<name>` from `main`, keeps `make check` green, and opens a pull request; CI runs `make check`.
+3. A WP may add its runtime dependencies to `pyproject.toml` and re-run `make lock`; conflicts in these two files are resolved by the integrator with `make lock`.
+4. At each checkpoint the integrator merges the group, records the commit in `PROGRESS.md`, and uploads `SPEC.md`, `PROGRESS.md`, `HANDBOOK.md`, and a git bundle snapshot to the Drive folder.
 
 ## 8 Decisions (C0)
 
 | # | Question | Decision |
 |---|---|---|
-| Q1 | Git history as `animath.bundle` in Drive | yes |
+| Q1 | Code storage | GitHub `kleasama/animath`; Drive holds documents and checkpoint bundles |
 | Q2 | Claude API as LLM backend | yes |
 | Q3 | Commercial use | no |
 | Q4 | GPU available | no |

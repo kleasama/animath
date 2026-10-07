@@ -17,8 +17,8 @@ Legend: ✓ done · ✱ in progress · ○ open · ⏸ checkpoint (review, commi
 | 1.5 | `core.config`: settings from defaults, TOML, environment | ✓ |
 | 1.6 | `llm`: protocol, Claude adapter, replay cache | ✓ |
 | 1.7 | `cli.py` (`schema`, `inspect`, `config`); `docker/Dockerfile` | ✓ |
-| 1.8 | Licence audit in `make check` | ✓ |
-| ⏸ C1 | Foundation review (auto-approved) | ✓ |
+| 1.8 | Licence audit in `make check`; GitHub Actions CI | ✓ |
+| ⏸ C1 | Foundation review (auto-approved); commit `95f0846` | ✓ |
 | 2.1 | WP1 ingest: MD → $\mathcal{D}$ | ○ |
 | 2.2 | WP1 ingest: LaTeX flatten, macros, theorems, algorithms → $\mathcal{D}$ | ○ |
 | 2.3 | WP1 ingest: PDF (source lookup, raster + Claude transcription) → $\mathcal{D}$ | ○ |
@@ -48,6 +48,7 @@ Legend: ✓ done · ✱ in progress · ○ open · ⏸ checkpoint (review, commi
 | C1 | Container: 4 cores, 15 GB RAM, no GPU, no TeX preinstalled (apt available), ffmpeg 6.1, pandoc 3.1. GPU parsers, GROBID, Typst, Blender, AV1, WhisperX trimmed (SPEC §6.3). |
 | 1.1–1.8 | 41 tests, 100% line+branch coverage, mypy strict clean, licence audit clean. |
 | 1.7 | Dockerfile not built: no container runtime in the session. |
+| C1 | Code moved to GitHub `kleasama/animath` (user decision). Tag push is refused by the session's git proxy; checkpoints are recorded by commit hash. |
 
 ## Open questions
 
