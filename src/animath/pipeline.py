@@ -115,11 +115,19 @@ def cost(u: Usage, model: str) -> float:
 
 
 def voice(params: Params, env: Mapping[str, str] = os.environ) -> TTS:
-    """Kokoro if ANIMATH_KOKORO names a model directory, else espeak-ng."""
-    v = () if params.voice == "default" else (params.voice,)
+    """Kokoro if ANIMATH_KOKORO names a model directory, else espeak-ng; both at `params.wpm`.
+
+    espeak-ng keeps its default voice for a Kokoro voice name such as `af_heart`.
+    """
+    v = params.voice
     if root := env.get("ANIMATH_KOKORO"):
-        return Kokoro(Path(root), *v)
-    return Espeak(*v)
+        speed = round(params.wpm / Kokoro.wpm_per_speed, 3)
+        return (
+            Kokoro(Path(root), speed=speed)
+            if v == "default"
+            else Kokoro(Path(root), v, speed=speed)
+        )
+    return Espeak(wpm=params.wpm) if v == "default" or "_" in v else Espeak(v, wpm=params.wpm)
 
 
 def pages(data: bytes, spec: str) -> bytes:

@@ -48,18 +48,21 @@ BOARD = Storyboard(
 )
 
 
-def test_sentences_join_lines_until_a_stop() -> None:
+def test_sentences_end_at_stops_and_pauses() -> None:
     lines = [
         Line(text="Take one leaf,", bookmark="t"),
-        Line(text="with its coordinates.", bookmark="c"),
+        Line(text="with its coordinates.", bookmark="c", pause_s=2.0),
         Line(text="Then stop"),
         Line(text='here, he said "now."', bookmark="h"),
+        Line(text="Wait", pause_s=1.5),
+        Line(text="for it", bookmark="f"),
         Line(text="Tail", bookmark="z"),
     ]
     assert sentences(lines, [ln.text for ln in lines]) == [
-        ("Take one leaf, with its coordinates.", {"t": 0, "c": 3}),
-        ('Then stop here, he said "now."', {"h": 2}),
-        ("Tail", {"z": 0}),
+        ("Take one leaf, with its coordinates.", {"t": 0, "c": 3}, 2.0),
+        ('Then stop here, he said "now."', {"h": 2}, 0.0),
+        ("Wait", {}, 1.5),
+        ("for it Tail", {"f": 0, "z": 2}, 0.0),
     ]
 
 
@@ -78,6 +81,20 @@ def test_narrate_produces_valid_narrations(store: Store, verbalizer: Verbalizer)
     assert n.duration_s == (300 + 172 + 400 + 52 + 600) / 1000
     assert from_wav(store.get_blob(n.audio), 1000).size == 1524
     assert store.lookup(Narration, key(BOARD.scenes[1], tts, verbalizer)) is not None
+
+
+def test_pause_moves_the_next_bookmark(store: Store, verbalizer: Verbalizer) -> None:
+    def board(pause: float) -> Storyboard:
+        lines = Line(text="Wait here.", bookmark="a", pause_s=pause), Line(text="Go.", bookmark="b")
+        return Storyboard(title="t", scenes=(scene("s", *lines),))
+
+    n0, n1 = (
+        store.get(Narration, narrate(board(p), store, FakeTTS(), verbalizer)["s"])
+        for p in (0, 1.25)
+    )
+    assert n1.bookmarks["a"] == n0.bookmarks["a"]
+    assert n1.bookmarks["b"] - n0.bookmarks["b"] == pytest.approx(1.25)
+    assert n1.duration_s - n0.duration_s == pytest.approx(1.25)
 
 
 def test_cached_scenes_are_skipped(store: Store, verbalizer: Verbalizer, tmp_path: Path) -> None:
