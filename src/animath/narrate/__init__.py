@@ -4,12 +4,12 @@ from concurrent.futures import ThreadPoolExecutor
 from animath.core.hashing import digest_of
 from animath.core.schemas import Line, Narration, Scene, Storyboard
 from animath.core.store import Store
-from animath.narrate.align import timeline
+from animath.narrate.align import captions, timeline
 from animath.narrate.g2p import split
 from animath.narrate.tts import TTS, to_wav
 from animath.narrate.verbalize import Verbalizer
 
-VERSION = "2"
+VERSION = "3"
 
 
 def key(scene: Scene, tts: TTS, verbalizer: Verbalizer) -> str:
@@ -49,10 +49,11 @@ def narrate(
         if (n := store.lookup(Narration, k)) is not None:
             done[sid] = digest_of(n)
     todo = [s for s in board.scenes if s.id not in done]
-    spoken = iter(verbalizer.lines([ln.text for s in todo for ln in s.narration]))
-    texts = [[next(spoken) for _ in s.narration] for s in todo]
+    toks = iter(verbalizer.tokens([ln.text for s in todo for ln in s.narration]))
+    texts = [[next(toks) for _ in s.narration] for s in todo]
 
-    def one(scene: Scene, said: list[str]) -> str:
+    def one(scene: Scene, lines: list[list[tuple[str, str]]]) -> str:
+        said = [" ".join(" ".join(s for _, s in t).split()) for t in lines]
         utts = [(t, c, *tts.synth(t)) for t, c in sentences(scene.narration, said)]
         audio, words, marks = timeline(utts, tts.rate)
         n = Narration(
@@ -60,6 +61,7 @@ def narrate(
             audio=store.put_blob(to_wav(audio, tts.rate)),
             duration_s=audio.size / tts.rate,
             words=tuple(words),
+            captions=tuple(captions([x for t in lines for x in t], words)),
             bookmarks=marks,
         )
         return store.put(n, keys[scene.id])

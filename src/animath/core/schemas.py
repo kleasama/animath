@@ -280,15 +280,17 @@ class Narration(Artifact):
     audio: Digest
     duration_s: float = Field(gt=0)
     words: tuple[Word, ...] = ()
+    captions: tuple[Word, ...] = ()
     bookmarks: dict[str, float] = {}
 
     @model_validator(mode="after")
     def _timeline(self) -> Self:
-        starts = [w.start for w in self.words]
-        if starts != sorted(starts):
-            raise ValueError("word starts not monotone")
-        if self.words and self.words[-1].end > self.duration_s:
-            raise ValueError("words exceed audio duration")
+        for name, ws in (("word", self.words), ("caption", self.captions)):
+            starts = [w.start for w in ws]
+            if starts != sorted(starts):
+                raise ValueError(f"{name} starts not monotone")
+            if ws and ws[-1].end > self.duration_s:
+                raise ValueError(f"{name}s exceed audio duration")
         _within(self.bookmarks, self.duration_s, "bookmarks")
         return self
 
