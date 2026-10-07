@@ -11,7 +11,10 @@ dependencies = [
     "anthropic>=1.11,<2",
     "numpy>=2.3",
     "onnxruntime>=1.23",
+    "pillow>=12.3,<13",
     "pydantic>=2.13,<3",
+    "pypandoc-binary>=1.17,<2",
+    "pypdfium2>=5.14,<6",
     "scipy>=1.16",
 ]
 

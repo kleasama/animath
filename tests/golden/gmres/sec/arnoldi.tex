@@ -1,0 +1,36 @@
+\section{Arnoldi process}\label{sec:arnoldi}
+Algorithm~\ref{alg:arnoldi} builds an orthonormal basis $V_m$ of $\K{m}{A,r_0}$ and
+$\bar H_m\in\R^{(m+1)\times m}$ with
+\begin{align}
+A V_m &= V_{m+1}\bar H_m, \label{eq:arnoldi}\\
+V_{m+1}^\top V_{m+1} &= I. \label{eq:orth}
+\end{align}
+\begin{algorithm}
+\caption{Arnoldi with modified Gram--Schmidt}\label{alg:arnoldi}
+\begin{algorithmic}[1]
+\Require $A$, $r_0$, $m$
+\State $v_1 \gets r_0/\|r_0\|_2$
+\For{$j = 1,\dots,m$}
+  \State $w \gets A v_j$
+  \For{$i = 1,\dots,j$}
+    \State $h_{ij} \gets v_i^\top w$ \Comment{projection}
+    \State $w \gets w - h_{ij} v_i$
+  \EndFor
+  \State $h_{j+1,j} \gets \|w\|_2$
+  \If{$h_{j+1,j} = 0$}
+    \State \Return \Comment{invariant subspace}
+  \EndIf
+  \State $v_{j+1} \gets w / h_{j+1,j}$
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+\begin{theorem}[Least squares]\label{thm:ls}
+By \eqref{eq:arnoldi} and \eqref{eq:orth}, $x_m=V_m y_m$ with
+\[ y_m=\argmin_{y\in\R^m}\|\beta e_1-\bar H_m y\|_2 . \]
+\end{theorem}
+\begin{proof}
+For $x=V_m y$, $b-Ax=V_{m+1}(\beta e_1-\bar H_m y)$, and $V_{m+1}$ has orthonormal columns.
+\end{proof}
+\begin{lemma}\label{lem:term}
+In exact arithmetic, GMRES terminates in at most $n$ steps.
+\end{lemma}

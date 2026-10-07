@@ -1,0 +1,20 @@
+\documentclass{article}
+\usepackage{amsmath,amssymb,amsthm,algorithm,algpseudocode}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}[theorem]{Lemma}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\K}[2]{\mathcal{K}_{#1}(#2)}
+\DeclareMathOperator*{\argmin}{arg\,min}
+\title{GMRES}
+\begin{document}
+\maketitle
+\section{Problem}\label{sec:problem}
+Let $A\in\R^{n\times n}$ be nonsingular and $b\in\R^n$. With $x_0=0$, $r_0=b$ and
+$\beta=\|r_0\|_2$, GMRES~\cite{saad1986} computes % iterate m
+\begin{equation}\label{eq:gmres}
+x_m=\argmin_{x\in\K{m}{A,r_0}}\|b-Ax\|_2 .
+\end{equation}
+\input{sec/arnoldi}
+\bibliographystyle{plain}
+\bibliography{refs}
+\end{document}
