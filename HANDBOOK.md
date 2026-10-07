@@ -115,7 +115,7 @@ Output: voiced segments joined by $g$ zeros (no trailing gap); duration $= \sum_
 
 | # | Date | Decision | Reason |
 |---|---|---|---|
-| D1 | 2026-10-07 | Code in GitHub `kleasama/animath`; Drive holds documents and checkpoint bundles | parallel WPs need a git remote |
+| D1 | 2026-10-07 | Code in GitHub `kleasama/animath`; Drive holds documents only | parallel WPs need a git remote |
 | D2 | 2026-10-07 | C0 defaults accepted (SPEC §8) | user approval |
 | D3 | 2026-10-07 | CPU-only toolchain; GPU parsers replaced by Claude vision transcription | no GPU in containers |
 | D4 | 2026-10-07 | Schemas frozen at C1; changes only through integrator | parallel WPs without conflicts |
