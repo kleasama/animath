@@ -351,7 +351,7 @@ Numerical arguments are literals or `ArrayRef` $(i, a)$: array $a$ of the `DataS
 | `field` | `values` $u_{ij}$ at $(x_j, y_i)$, $y$ upward | viridis heatmap | | |
 | `surface` | `points` $(n,3)$, `faces` $(m,3)$, `scalars` $(n)$ or $(m)$, `azimuth`, `elevation` | PyVista offscreen image | | |
 | `trace` | `lines` (plain text, not TeX), `steps` (line indices) | monospace listing, cursor at `steps[0]`; visits the others uniformly unless `goto` actions move it | `line:k` (0-based), `cursor` | `goto` |
-| `hierarchy` | `data`, `level`, `done`, `coloured`, `views` ⊆ {`plate`, `operator`}, `steps` (`do`, `part`) | cluster boxes, block operator in tree order (§9.15); step $i$ at $t_e + (i+1)(t_x-t_e)/(n+1)$ | | |
+| `hierarchy` | `data`, `level`, `done`, `coloured`, `views` ⊆ {`plate`, `operator`}, `steps` (`do`, `part`) | cluster boxes, block operator in tree order (§9.15); step $i$ at $t_e + (i+1)(t_x-t_e)/(n+1)$ | `t`, `s`, `cluster:k`, `colour:c`, `block:a:b` | the 15 board verbs of §9.15 |
 | `code` | `code` (§9.10) | generated | index paths | the snippet's `act` |
 
 Every primitive also accepts dotted index paths (`1.0`) as parts. A TeX part isolates every occurrence of the substring that cuts no control word (`t` is not isolated inside `\to`). Undelimited arguments of `^`, `_` and accent or font macros are braced first (`x^2` to `x^{2}`, `\hat x` to `\hat{x}`), since an isolation marker before such an argument breaks the TeX; cuts inside braces are safe.
@@ -441,19 +441,19 @@ kept if it exists and a visual is alive; at most 8, evenly subsampled. A visual 
 2. LaTeX precompile is the build phase of the draft render: `compose` builds every mobject before any frame, and build errors are localized.
 3. Unit tests use a queued fake LLM (`tests/scene/fake.py`); no network.
 
-9.15 `hierarchy` primitive. Draws an `h2.rss` DataSet (§8.8) from level $\lambda$ (default $d$, `done` stages already eliminated). Plate view (2-D points only): cluster boxes, grey or in their colour class, with a $k_t \mid r_t$ bar from split to eliminate, dimmed once eliminated. Operator view: the active matrix in tree order, block widths $\propto |B_t|$, rescaled to the full side on each level; near blocks orange, far blocks blue by level (darker is coarser, the background is the far field of level $\lambda$), fill amber, zeroed bands white, $S$ blue and $R$ red. Parts: `cluster` (BFS id on the level; `t` the first stage with the largest $|N(t)|$, `s` its next later neighbour; default the current cluster), `colour`, `block` $(a, b)$.
+9.15 `hierarchy` primitive. Draws an `h2.rss` DataSet (§8.8) from level $\lambda$ (default $d$, `done` stages already eliminated). Plate view (2-D points only): cluster boxes, grey or in their colour class, with a $k_t \mid r_t$ bar from split to eliminate (the $r_t$ part white once zeroed), dimmed once eliminated. Operator view: the active matrix in tree order, block widths $\propto |B_t|$, rescaled to the full side on each level; near blocks orange, far blocks blue by level (darker is coarser, the background is the far field of level $\lambda$), fill amber, zeroed bands white, $S$ blue and $R$ red. Parts, as `Part` fields or selectors: `t` (the first stage of the level with the largest $|N(t)|$), `s` (its next later neighbour), `cluster:k` (BFS id), `colour:c`, `block:a:b` (also `block:a,b`). `verbs`, `part` and `act` expose the verbs and parts to word-timed actions.
 
 | Action | Effect |
 |---|---|
 | `select`, `footprint`, `ring` | mark $t$ (exclusive), $N(t)$, $N^2(t) \setminus N(t)$ (dashed) |
-| `clear`, `colour` | unmark $t$ or all; colour $t$ or the level by $c(t)$ |
+| `clear`, `colour` | unmark $t$ or all; colour $t$, a colour class or the level by $c(t)$ |
 | `rotate`, `split`, `zero`, `eliminate`, `schur`, `fill` | phases 1–6 of stage $t$, monotone: flash its rows and columns; split $S \mid R$; zero $R$ against the far field; shrink to $k_t$; flash $N(t)^2$; show its fill |
-| `drop` | remove a fill block on view |
+| `drop` | remove a fill block on view, flashing it (at least 0.3 wide) and the boxes of its pair |
 | `wave` | eliminate the pending stages of a colour (default the least), flashing the class |
 | `coarsen` | finish the level and merge children into parents |
 | `top` | one dense block on the top level |
 
-`advance` maps (state, step) to the next state and its flashes; `draw` maps a state to keyed specs; transition $i$ is one `Transform` per changed key. A vanishing near or fill block morphs into its parent's fill or near block (else the dense top), a box into its parent box; anything else fades; flashes run there and back. Items are created invisible on first use and removed at the next transition; an invisible anchor recovers the fit (9.2). There is no `AnimationGroup`, which `Scene.add` would restructure out of the board. `Board.step(i, t, run)` gives the cues of transition $i$ for any timing; steps closer than 0.1 s raise `AnimateError`.
+`advance` maps (state, step) to the next state and its flashes, and rejects a part kind the verb does not take (`TAKES`: cluster parts by default; `colour` cluster or class; `wave` class; `drop` block; `coarsen` and `top` none). `draw` maps a state to keyed specs. The `Board` holds the current state; `go(steps)` advances it and returns one `AnimationGroup` of one `Transform` per changed key, whose group is the board itself, already in the scene, so `Scene.add` leaves it whole. A vanishing near or fill block morphs into its parent's fill or near block (else the dense top), a box into its parent box; anything else fades; flashes run there and back. Items are created invisible on first use and removed at the next transition; an invisible anchor recovers the fit (9.2). `steps` are cues at $t_0 + (i+1)(t_1-t_0)/(n+1)$, and steps closer than 0.1 s raise `AnimateError`; actions call `go` when they play. Steps and actions thus advance one state in play order, and a continued view replays its actions at build; a resumed view replays its steps before its actions, so a visual takes one or the other. Selectors resolve when the verb plays, against the current level. For the generic verbs, `part` returns a group of the items a selector names (the boxes of its clusters on the plate, else their diagonal blocks; the block), a child of the board refilled after every transition, so a part follows the walk across levels.
 
 9.16 Decisions.
 
@@ -642,7 +642,8 @@ $f$ the animate function's qualified name, $\pi_5$ = (`width`, `height`, `fps`, 
 | `tests/scene` WP8 part | ≈ 10 s on 4 cores |
 | Narration, Kokoro `af_heart`, 789 words (340 s of audio), 4 threads | 186 s |
 | `h2.rss`, $n = 4096$, `tol` 1e-5 | factorisation 3.2 s; with the dense reference 8 s |
-| `hierarchy`, full instance, 13 steps, 1080p30 | 41 s for 20.5 s of video, about 850 items per state |
+| `hierarchy`, full instance, 13 steps, 1080p30 | 85 s for 20.5 s of video (71 s before verbs, same machine); about 850 items per state, all redrawn while a step plays |
+| `hierarchy`, full instance, 28 word-timed actions, 240p15 draft with the pacing renderer | 73 s for 48 s of video; 0.12 s per redrawn frame |
 
 ## 14 Decisions log
 
@@ -660,3 +661,4 @@ $f$ the animate function's qualified name, $\pi_5$ = (`width`, `height`, `fps`, 
 | D10 | 2026-10-07 | GEMMs in `h2` through SciPy's BLAS | NumPy and SciPy OpenBLAS pools contend (about 8×) |
 | D11 | 2026-10-07 | `hierarchy` morphs keyed items with per-item `Transform`s | `Scene.add` dissolves groups not yet in the scene |
 | D12 | 2026-10-07 | User-supplied arrays enter as `data.npz` by path and SHA-256 | external runs feed primitives without new kernels; the hash pins cache and content |
+| D13 | 2026-10-07 | `hierarchy` advances a live state when a step or action plays, not a plan made at build | word-timed actions fire in play order, and continued views replay them at build |

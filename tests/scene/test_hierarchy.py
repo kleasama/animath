@@ -4,7 +4,7 @@ from typing import Any
 import av
 import numpy as np
 import pytest
-from manim import DashedVMobject, Text
+from manim import BLUE, RED, WHITE, Animation, DashedVMobject, Text, Wait
 
 from animath.core.errors import AnimateError
 from animath.core.schemas import Params, Visual
@@ -20,16 +20,21 @@ from animath.scene.primitives.hierarchy import (
     SPLIT,
     Board,
     Flash,
+    Hierarchy,
     HierarchyArgs,
+    Part,
     Spec,
     State,
     Step,
+    View,
     Walk,
     advance,
     below,
     draw,
     mobject,
+    named,
     nodes,
+    parse,
     shown,
     up,
 )
@@ -136,9 +141,17 @@ def test_marks(w: Walk) -> None:
     assert st.marks == {(t, "footprint"), (s, "ring")}
     assert advance(w, st, Step(do="clear"))[0].marks == frozenset()
     assert advance(w, st, step("colour", cluster=16))[0].coloured == {16}
+    assert advance(w, st, step("colour", colour=4))[0].coloured == {19, 29}
     assert advance(w, st, Step(do="colour"))[0].coloured == set(nodes(4))
-    with pytest.raises(AnimateError, match="cluster 7 is not on level 4"):
-        advance(w, st, step("select", cluster=7))
+    for bad, match in (
+        (step("select", cluster=7), "cluster 7 is not on level 4"),
+        (step("colour", colour=9), "no cluster of colour 9 on level 4"),
+        (step("select", colour=1), "select takes no colour part"),
+        (step("wave", cluster=15), "wave takes no cluster part"),
+        (step("coarsen", block=(1, 2)), "coarsen takes no block part"),
+    ):
+        with pytest.raises(AnimateError, match=match):
+            advance(w, st, bad)
 
 
 def test_stage_phases(w: Walk) -> None:
@@ -173,8 +186,15 @@ def test_drop_coarsen_top(w: Walk) -> None:
     assert made == {(a, b) for a in w.near[t] for b in w.near[t] if b not in w.near[a]}
     assert shown(w, st) == made
     blk = min(made)
-    st, _ = advance(w, st, step("drop", block=blk))
-    assert shown(w, st) == made - {blk}
+    fb = draw(w, st, ("plate", "operator"))[0]["fill", *blk]
+    st, fl = advance(w, st, step("drop", block=blk))
+    assert (shown(w, st), fl) == (made - {blk}, (("drop", *blk),))
+    flash = draw(w, st, ("plate", "operator"), fl)[1]
+    assert set(flash) == {("pdrop", blk[0]), ("pdrop", blk[1]), ("odrop", *blk)}
+    sq = flash["odrop", *blk]
+    assert (sq.x1 - sq.x0, sq.y1 - sq.y0, fb.x1 - fb.x0) == pytest.approx((0.3, 0.3, 0.25))
+    assert sq.x0 + sq.x1 == pytest.approx(fb.x0 + fb.x1)
+    assert sq.y0 + sq.y1 == pytest.approx(fb.y0 + fb.y1)
     for bad in (None, blk):
         with pytest.raises(AnimateError, match="not a fill block on view"):
             advance(w, st, step("drop", block=bad))
@@ -255,6 +275,8 @@ def test_plate_split_bar(w: Walk) -> None:
     t = w.pick(4)[0]
     out = draw(w, walk(w, {"do": "split"})[0], ("plate",))[0]
     k, r = out["psplit", t, 0], out["psplit", t, 1]
+    assert (k.fill, r.fill) == (BLUE.to_hex(), RED.to_hex())
+    assert draw(w, walk(w, {"do": "zero"})[0], ("plate",))[0]["psplit", t, 1].fill == WHITE.to_hex()
     assert (k.x1 - k.x0) / (r.x1 - r.x0) == pytest.approx(w.k(t) / (w.n0(t) - w.k(t)))
     assert (k.x0, k.x1, r.x1) == pytest.approx((out["box", t].x0, r.x0, out["box", t].x1))
     done = draw(w, walk(w, {"do": "eliminate"})[0], ("plate",))[0]
@@ -292,45 +314,110 @@ def test_mobject() -> None:
     assert d.get_center() == pytest.approx((1.0, 0.5, 0.0))
 
 
-def play(m: Board, i: int) -> None:
-    for c in m.step(i, 0.0, 1.0):
-        anim = c.play()
-        anim.begin()
-        anim.interpolate(1.0)
+def run(a: Animation) -> None:
+    a.begin()
+    a.finish()
+
+
+def test_parse() -> None:
+    sels = ("", "t", "s", "cluster:12", "colour:3", "block:5:6")
+    assert [parse(x) for x in sels] == [
+        Part(),
+        Part(cluster="t"),
+        Part(cluster="s"),
+        Part(cluster=12),
+        Part(colour=3),
+        Part(block=(5, 6)),
+    ]
+    assert parse("block:5,6") == Part(block=(5, 6))
+    for bad in ("u", " t", "cluster:", "cluster:-1", "colour:x", "block:1", "block:1;2"):
+        with pytest.raises(AnimateError, match=f"no part '{bad}'; parts: t, s, cluster:k"):
+            parse(bad)
+
+
+def test_named(w: Walk) -> None:
+    t, s = w.pick(4)
+    both: tuple[View, ...] = ("plate", "operator")
+    assert named(w, State(4), both, parse("t")) == [("box", t)]
+    assert named(w, State(4), ("operator",), parse("s")) == [("near", s, s)]
+    assert named(w, State(4), both, parse("cluster:7")) == [("box", 7)]
+    assert named(w, State(4), both, parse("colour:4")) == [("box", 19), ("box", 29)]
+    assert named(w, State(3), both, parse("block:3:4")) == [
+        ("near", 3, 4),
+        ("far", 3, 4),
+        ("fill", 3, 4),
+    ]
+    assert named(w, State(2), both, parse("t")) == named(w, State(4), both, Part()) == []
 
 
 def test_board(store: Store, arrays: dict[str, Any]) -> None:
     p = PRIMITIVES["hierarchy"]
     steps = [{"do": "select"}, {"do": "rotate"}, {"do": "eliminate"}, {"do": "clear"}]
     a = p.args.model_validate({"steps": steps})
-    m = p.build(a, context(store, **arrays), MAIN)
+    ctx = context(store, **arrays)
+    m = p.build(a, ctx, MAIN)
     assert isinstance(m, Board)
     m.scale(0.5).shift((1.0, 1.0, 0.0))
-    anchor = m.make(m.start["frame",])
+    anchor = m.make(m.anchor)
     assert anchor.get_center() == pytest.approx(m.items["frame",].get_center())
     assert anchor.width == pytest.approx(m.items["frame",].width)
     cues = p.cues(m, a, 1.0, 6.0)
     assert (cues[0].t, cues[0].run_time) == (1.0, 1.0)
-    assert sorted({c.t for c in cues[1:]}) == [2.0, 3.0, 4.0, 5.0]
+    assert [c.t for c in cues[1:]] == [2.0, 3.0, 4.0, 5.0]
     assert {c.run_time for c in cues[1:]} == {0.8}
-    tc = Walk.load(context(store, **arrays), 0).pick(4)[0]
-    play(m, 0)
-    play(m, 1)
+    tc = m.w.pick(4)[0]
+    run(cues[1].play())
+    run(cues[2].play())
     flashes = sorted(k for k in m.items if k[0] == "flash")
-    assert flashes == [("flash", 1, "rot", tc, 0), ("flash", 1, "rot", tc, 1)]
+    assert flashes == [("flash", "rot", tc, 0), ("flash", "rot", tc, 1)]
     assert all(m.items[k].get_fill_opacity() == pytest.approx(0.0) for k in flashes)
-    play(m, 2)
+    run(cues[3].play())
     assert not [k for k in m.items if k[0] == "flash"]
     assert set(m.submobjects) == set(m.items.values())
-    play(m, 3)
+    run(cues[4].play())
     assert set(m.dead) == {("psel", tc), ("osel", tc, 0), ("osel", tc, 1)}
     assert all(m.items[k].get_stroke_opacity() == pytest.approx(0.0) for k in m.dead)
-    for k, sp in m.plan[-1][0].items():
+    for k, sp in m.cur.items():
         assert m.items[k].get_center() == pytest.approx(m.make(sp).get_center(), abs=1e-6)
+    assert isinstance(m.go([Step(do="clear")]), Wait)
+    assert not m.dead
     with pytest.raises(AnimateError, match=r"4 steps in 0\.30 s"):
         p.cues(m, a, 0.0, 0.3)
     bare = p.args.model_validate({})
-    assert len(p.cues(p.build(bare, context(store, **arrays), MAIN), bare, 0.0, 0.3)) == 1
+    assert len(p.cues(p.build(bare, ctx, MAIN), bare, 0.0, 0.3)) == 1
+    with pytest.raises(AnimateError, match="coarsen: level 2 is the top"):
+        p.build(p.args.model_validate({"steps": [{"do": "coarsen"}] * 3}), ctx, MAIN)
+
+
+def test_actions(store: Store, arrays: dict[str, Any]) -> None:
+    h, a = Hierarchy(), HierarchyArgs()
+    assert h.verbs[:3] == ("select", "footprint", "ring")
+    assert len(h.verbs) == 15
+    m = h.build(a, context(store, **arrays), MAIN)
+    assert isinstance(m, Board)
+    t, s = m.w.pick(4)
+    pt, pc = h.part(m, a, "t"), h.part(m, a, "colour:0")
+    assert h.part(m, a, "t") is pt
+    assert {pt, pc} <= set(m.submobjects)
+    assert list(pt) == [m.items["box", t]]
+    assert set(pc) == {m.items["box", u] for u in (15, 20, 25, 30)}
+    run(h.act(m, a, "select", ["t", "s"]))
+    assert (m.st.current, m.st.marks) == (s, frozenset({(s, "select")}))
+    run(h.act(m, a, "wave", ["colour:0"]))
+    assert [m.items["box", u].get_fill_opacity() for u in (15, t)] == pytest.approx([0.3, 0.85])
+    run(h.act(m, a, "coarsen", []))
+    assert m.st.level == 3
+    assert list(pt) == [m.items["box", m.w.pick(3)[0]]]
+    assert set(pc) == {m.items["box", u] for u in nodes(3) if m.w.colour(u) == 0}
+    for verb, sel, match in (
+        ("select", "colour:1", "select takes no colour part"),
+        ("top", "", "level 3 is not the undone top 2"),
+        ("ring", "cluster:15", "cluster 15 is not on level 3"),
+    ):
+        with pytest.raises(AnimateError, match=match):
+            h.act(m, a, verb, [sel] if sel else [])
+    with pytest.raises(AnimateError, match="no part 'u'"):
+        h.part(m, a, "u")
 
 
 def test_plate_needs_2d(store: Store, arrays: dict[str, Any]) -> None:
