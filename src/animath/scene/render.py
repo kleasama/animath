@@ -178,9 +178,10 @@ def entry(
 
 
 def compose(scene: Scene, ctx: Context, tl: Timeline, f: Box) -> list[Item]:
-    """Build every visual, fit it into its grid cell, and attach entry, action and exit cues."""
+    """Build every visual, fit it into its grid cell, and attach entry, action and exit cues;
+    a primitive's own animations run between its entry and its exit."""
     items: list[Item] = []
-    args: list[Args] = []
+    gone = {v.args.get("replaces") for v in scene.visuals}
     for i, v in enumerate(scene.visuals):
         name = f"{scene.id}.{i}:{v.primitive}"
         p = PRIMITIVES.get(v.primitive)
@@ -196,28 +197,30 @@ def compose(scene: Scene, ctx: Context, tl: Timeline, f: Box) -> list[Item]:
         t0, t1 = tl.marks[v.at] if v.at else 0.0, tl.marks[a.until] if a.until else tl.duration
         if not t0 < t1:
             raise AnimateError(f"{name}: empty interval [{t0}, {t1}]")
+        out = max(t0, t1 - EXIT_S) if i not in gone and (a.until or not a.persist) else None
         c = cell(a.region, f)
         try:
             m = p.build(a, ctx, c)
             s = min(1.0, c.width / max(m.width, 1e-9), c.height / max(m.height, 1e-9))
             m.scale(s).move_to((c.center[0], c.center[1], 0.0))
-            own = p.cues(m, a, t0, t1)
+            end = t1 if out is None else out
+            own = p.cues(m, a, t0, end)
             first = entry(p, a, m, own[0], items, scene, i)
-            later = actions(p, a, m, tl, first.t + first.run_time, t1, name)
+            go = first.t + first.run_time
+            if len(own) > 1:
+                if go >= end:
+                    raise AnimateError(f"no time for its animations in [{go:.2f}, {end:.2f}) s")
+                own = own[:1] + p.cues(m, a, go, end)[1:]
+            later = actions(p, a, m, tl, go, t1, name)
         except AnimateError as e:
             raise AnimateError(f"{name}: {e}") from e
         except Exception as e:
             raise AnimateError(f"{name}: build failed: {e}") from e
         cues = [first, *(replace(x, mobject=m) for x in own[1:]), *later]
+        if out is not None:
+            cues.append(Cue(out, EXIT_S, partial(leave, p, m), m))
         box = Box(m.get_left()[0], m.get_bottom()[1], m.get_right()[0], m.get_top()[1])
         items.append(Item(Placement(name, box, t0, t1, s), m, cues))
-        args.append(a)
-    gone = {a.replaces for a in args if a.replaces is not None}
-    for i, (it, a) in enumerate(zip(items, args, strict=True)):
-        if i not in gone and (a.until or not a.persist):
-            t = max(it.placement.t0, it.placement.t1 - EXIT_S)
-            q = PRIMITIVES[scene.visuals[i].primitive]
-            it.cues.append(Cue(t, EXIT_S, partial(leave, q, it.mobject), it.mobject))
     return items
 
 

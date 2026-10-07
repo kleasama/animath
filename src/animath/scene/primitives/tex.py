@@ -92,7 +92,7 @@ class Equation(Primitive[EquationArgs]):
 
 class Derive(Primitive[DeriveArgs]):
     """Chain of equalities; parts marked {{...}} are matched across steps. Steps share the
-    visual's life equally, unless `next` actions advance them. Verb: next."""
+    time between entry and exit equally, unless `next` actions advance them. Verb: next."""
 
     name = "derive"
     args = DeriveArgs
@@ -115,9 +115,9 @@ class Derive(Primitive[DeriveArgs]):
             raise AnimateError(f"{n} next actions for {len(m)} steps")
         if n:
             return [first]
-        t = self.times(len(m), t0, t1)
+        t, r = self.times(len(m), t0, t1), min(1.0, 0.8 * (t1 - t0) / len(m))
         step = partial(self.act, m, a, "next", [])
-        return [first] + [Cue(t[k], 1.0, step) for k in range(1, len(m))]
+        return [first] + [Cue(t[k], r, step) for k in range(1, len(m))]
 
     def act(self, m: Mobject, a: DeriveArgs, verb: str, parts: list[str]) -> Animation:
         k = getattr(m, SHOWN) + 1

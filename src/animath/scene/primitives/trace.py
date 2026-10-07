@@ -59,7 +59,7 @@ class Trace(Primitive[TraceArgs]):
         if any(x.do == "goto" for x in a.actions):
             return [Cue(t0, 1.0, lambda: enter(m))]
         return [Cue(t0, 1.0, lambda: enter(m))] + [
-            Cue(t0 + i * dt, 0.4, partial(goto, cursor, rows[k]))
+            Cue(t0 + i * dt, min(0.4, 0.8 * dt), partial(goto, cursor, rows[k]))
             for i, k in enumerate(a.steps[1:], 1)
         ]
 

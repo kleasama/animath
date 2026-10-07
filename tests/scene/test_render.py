@@ -190,6 +190,19 @@ def test_compose_rejects(store: Store, visual: Visual, match: str) -> None:
         compose(scn(visual), context(store), TL, F)
 
 
+def test_compose_own_cues_run_between_entry_and_exit(store: Store) -> None:
+    d = Visual(primitive="derive", args={"steps": ["a", "b", "c"]})
+    (it,) = compose(scn(d), context(store), TL, F)
+    s = (4.0 - EXIT_S - ENTER_S) / 3
+    assert [c.t for c in it.cues] == pytest.approx([0.0, ENTER_S + s, ENTER_S + 2 * s, 4 - EXIT_S])
+    assert [c.run_time for c in it.cues] == pytest.approx([ENTER_S, 0.8 * s, 0.8 * s, EXIT_S])
+    tl = Timeline({"a": 0.0, "b": 1.0}, 2.0)
+    with pytest.raises(
+        AnimateError, match=r"derive: no time for its animations in \[1\.50, 1\.40\)"
+    ):
+        compose(scn(d), context(store), tl, F)
+
+
 def test_compose_needs_time_after_entry(store: Store) -> None:
     tl = Timeline({"a": 0.0, "b": 1.0}, 4.0)
     v = eq(until="b", actions=[{"at": "a", "do": "dim"}])

@@ -299,7 +299,7 @@ Numerical arguments are literals or `ArrayRef` $(i, a)$: array $a$ of the `DataS
 |---|---|---|---|---|
 | `text` | `text` (LaTeX text mode) | `Tex` | TeX substrings | |
 | `equation` | `latex` | `MathTex` | TeX substrings, e.g. `L_{21}` | |
-| `derive` | `steps` ($\ge 2$; `{{...}}` marks matched parts) | `MathTex` chain; `TransformMatchingTex` at $t_0 + k(t_1-t_0)/n$ unless `next` actions advance it | index paths | `next` |
+| `derive` | `steps` ($\ge 2$; `{{...}}` marks matched parts) | `MathTex` chain; `TransformMatchingTex` at $t_e + k(t_x-t_e)/n$ unless `next` actions advance it | index paths | `next` |
 | `matrix` | `entries` (strings or `ArrayRef`) | entries if $\max(m,n) \le 8$, centred on a grid whose pitch clears the largest entry by 0.4; else heatmap of $\log_{10}\lvert a_{ij}\rvert$ | `row:i`, `col:j`, `entry:i:j` (1-based), `brackets` | |
 | `plot` | `series` ($\le 5$; `x`, `y`, `label`), `xlabel`, `ylabel`, `logy` | `Axes`, line graphs, legend | `axes`, `labels`, `series:k`, `legend` | |
 | `field` | `values` $u_{ij}$ at $(x_j, y_i)$, $y$ upward | viridis heatmap | | |
@@ -336,7 +336,8 @@ Actions change parts in place, so the box measured at build bounds the visual un
 |---|---|---|
 | entry | $t_0$ | 1.5 s (`Write` or `FadeIn`); 1.2 s morph from visual $k$ (`TransformMatchingTex` between formulas, else `ReplacementTransform`) when `replaces`; 0 when `enter: none` |
 | action | $\min\big(\max(t_e, t_a),\; t_1 - 0.6 - r\big)$, but not before $t_e$ | $r = \max(0.25,\ 1/\texttt{rate})$ s |
-| exit | $\max(t_0, t_1 - 0.6)$ | 0.6 s `FadeOut`; none if replaced, or if `persist` without `until` |
+| own | spread by the primitive over $[t_e, t_x)$; an error if $t_e \ge t_x$ | ends by $t_x$: `derive` steps $\min(1,\ 0.8\,s)$, `trace` moves $\min(0.4,\ 0.8\,s)$ for slot $s$ |
+| exit | $t_x = \max(t_0, t_1 - 0.6)$ | 0.6 s `FadeOut`; none if replaced, or if `persist` without `until` ($t_x = t_1$) |
 
 Here $t_e$ is the end of the entry and $t_a$ the action time: the onset of `word` (case and punctuation ignored) within the slot $[\tau_{\texttt{at}}, \tau_{\text{next}})$ of its bookmark, else $\tau_{\texttt{at}} + \texttt{frac}\,(\tau_{\text{next}} - \tau_{\texttt{at}})$. An action with `at: null` is initial state, applied without frames at build; verbs listed as timed by the primitive (`next`, `goto`) need a bookmark. Generic verbs on parts: `show` (parts hidden at build, then written, or faded in if not vector), `hide`, `dim` (opacity 0.2), `indicate` (`Indicate`, or `Circumscribe` if not vector), `mark` (colour, default yellow), `unmark` (restore the built style). Verbs change mobjects in place; the end state of each is the start of the next.
 

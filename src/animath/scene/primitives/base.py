@@ -170,7 +170,8 @@ class Primitive[A: Args](ABC):
     def build(self, a: A, ctx: Context, cell: Box) -> Mobject: ...
 
     def cues(self, m: Mobject, a: A, t0: float, t1: float) -> list[Cue]:
-        """Entry first, then the primitive's own animations on [t0, t1)."""
+        """Entry at t0 first, then the primitive's own animations, ending by t1; `compose`
+        takes these from a second call with t0 at the end of the entry."""
         return [Cue(t0, ENTER_S, lambda: enter(m))]
 
     def first(self, m: Mobject) -> Mobject:

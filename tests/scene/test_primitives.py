@@ -187,7 +187,10 @@ def test_derive_cues(store: Store) -> None:
     m = p.build(a, context(store), MAIN)
     assert len(m) == 3
     assert all(isinstance(s, MathTex) for s in m)
-    assert [c.t for c in p.cues(m, a, 1.0, 4.0)] == [1.0, 2.0, 3.0]
+    cues = p.cues(m, a, 1.0, 4.0)
+    assert [c.t for c in cues] == [1.0, 2.0, 3.0]
+    assert [c.run_time for c in cues] == pytest.approx([1.5, 0.8, 0.8])
+    assert [c.run_time for c in p.cues(m, a, 1.0, 2.5)[1:]] == pytest.approx([0.4, 0.4])
     assert p.first(m) is m[0]
     assert p.last(m) is m[0]
     with pytest.raises(ValidationError):
@@ -399,7 +402,8 @@ def test_trace(store: Store) -> None:
     assert em > 0
     assert rows[2].get_fill_opacity() == 0
     cues = p.cues(m, a, 0.0, 3.0)
-    assert [c.t for c in cues] == [0.0, 1.0, 2.0]
+    assert [(c.t, c.run_time) for c in cues] == [(0.0, 1.0), (1.0, 0.4), (2.0, 0.4)]
+    assert [c.run_time for c in p.cues(m, a, 0.0, 0.75)[1:]] == pytest.approx([0.2, 0.2])
     anim = cues[1].play()
     anim.begin()
     anim.interpolate(1.0)
