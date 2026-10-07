@@ -19,20 +19,16 @@ Legend: ✓ done · ✱ in progress · ○ open · ⏸ checkpoint (review, commi
 | 1.7 | `cli.py` (`schema`, `inspect`, `config`); `docker/Dockerfile` | ✓ |
 | 1.8 | Licence audit in `make check`; GitHub Actions CI | ✓ |
 | ⏸ C1 | Foundation review (auto-approved); commit `95f0846` | ✓ |
-| 2.1 | WP1 ingest: MD → $\mathcal{D}$ | ○ |
-| 2.2 | WP1 ingest: LaTeX flatten, macros, theorems, algorithms → $\mathcal{D}$ | ○ |
-| 2.3 | WP1 ingest: PDF (source lookup, raster + Claude transcription) → $\mathcal{D}$ | ○ |
-| 2.4 | WP1 equation check; golden set and expected IR | ○ |
+| 2.1 | WP1 ingest: MD → $\mathcal{D}$ | ✓ |
+| 2.2 | WP1 ingest: LaTeX flatten, macros, theorems, algorithms → $\mathcal{D}$ | ✓ |
+| 2.3 | WP1 ingest: PDF (source lookup, raster + Claude transcription) → $\mathcal{D}$ | ✓ |
+| 2.4 | WP1 equation check (compile); golden set and expected IR | ✓ |
 | 2.5 | WP2 numerics: quadrature, Krylov with trace capture, MoM/BEM toy kernels, data cache | ✓ |
-| 2.6 | WP3 scene: primitive library (equation, derivation step, matrix, plot, field, algorithm trace) | ○ |
-| 2.7 | WP3 scene: layout checker, renderer wrapper, PyVista bridge | ○ |
-| 2.8 | WP4 narrate: SRE verbalization, Kokoro and espeak-ng TTS, bookmark timeline, VTT | ✓ |
-| 2.5 | WP2 numerics: quadrature, Krylov with trace capture, MoM/BEM toy kernels (Numba), data cache | ○ |
-| 2.6 | WP3 scene: primitive library (equation, derivation step, matrix, plot, field, algorithm trace) | ✓ |
+| 2.6 | WP3 scene: primitive library | ✓ |
 | 2.7 | WP3 scene: layout checker, renderer wrapper, PyVista bridge | ✓ |
-| 2.8 | WP4 narrate: SRE verbalization, Kokoro service, forced alignment, VTT | ○ |
-| 2.9 | WP5 assemble: concat, loudnorm, encode, manifest | ○ |
-| ⏸ C2 | Stage modules review; integrate group B | ○ |
+| 2.8 | WP4 narrate: SRE verbalization, Kokoro and espeak-ng TTS, bookmark timeline, VTT | ✓ |
+| 2.9 | WP5 assemble: concat, loudnorm, encode, manifest | ✓ |
+| ⏸ C2 | Stage modules review (auto-approved); group B integrated | ✓ |
 | 3.1 | WP6 extract: $\mathcal{K}$ with provenance | ○ |
 | 3.2 | WP7 plan: subgraph selection, storyboard, symbol ledger, duration budget | ○ |
 | ⏸ C3 | Semantics review; integrate group C | ○ |
@@ -55,6 +51,8 @@ Legend: ✓ done · ✱ in progress · ○ open · ⏸ checkpoint (review, commi
 | 2.6–2.7 | 8 primitives (`text`, `equation`, `derive`, `matrix`, `plot`, `field`, `surface`, `trace`); grid layout check; frame-exact scheduler; deterministic clips. 100% coverage of `scene/`. Handbook §9. |
 | C1 | Code moved to GitHub `kleasama/animath` (user decision). Tag push is refused by the session's git proxy; checkpoints are recorded by commit hash. |
 | 2.8 | Per-line synthesis replaces forced alignment (HANDBOOK 10.7). Kokoro untested with real weights: Hugging Face blocked in containers. |
+| 2.4 | SymPy equivalence check deferred to WP9; pandoc 3.9 bundled via `pypandoc-binary` (subprocess). |
+| C2 | PRs #1–#5 merged. 220 tests, 100% line+branch coverage, mypy strict, licences clean. For WP7/WP8: complex data refs need `part` ∈ {abs, real, imag}; the planner receives the primitive catalog as an argument (Rule 6.2). |
 
 ## Open questions
 
