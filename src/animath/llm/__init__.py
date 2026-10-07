@@ -1,4 +1,5 @@
 import base64
+import os
 from collections.abc import Sequence
 from typing import Any, Protocol
 
@@ -90,6 +91,19 @@ class Replay:
         return out, usage
 
 
+KEY_VARS = ("ANIMATH_API_KEY", "ANTHROPIC_API_KEY")
+
+
+def api_key() -> str:
+    key = next((k for v in KEY_VARS if (k := os.environ.get(v))), None)
+    if key is None:
+        raise LLMError(f"no API key: set {' or '.join(KEY_VARS)}, or offline=true")
+    return key
+
+
 def from_settings(s: Settings, store: Store) -> LLM:
     tag = f"{s.model}:{s.effort}"
-    return Replay(store, None if s.offline else Claude(s.model, s.effort, s.max_tokens), tag)
+    if s.offline:
+        return Replay(store, None, tag)
+    client = anthropic.Anthropic(api_key=api_key())
+    return Replay(store, Claude(s.model, s.effort, s.max_tokens, client), tag)

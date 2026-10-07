@@ -11,7 +11,7 @@ from animath.core.config import Settings
 from animath.core.errors import LLMError
 from animath.core.schemas import Usage
 from animath.core.store import Store
-from animath.llm import FALLBACK_BETA, Claude, Replay, from_settings
+from animath.llm import FALLBACK_BETA, KEY_VARS, Claude, Replay, api_key, from_settings
 
 
 class Answer(BaseModel):
@@ -95,8 +95,16 @@ def test_from_settings(store: Store, monkeypatch: pytest.MonkeyPatch) -> None:
     assert isinstance(off, Replay)
     assert off.inner is None
     assert off.tag == "claude-opus-5-5:high"
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
+    for v in KEY_VARS:
+        monkeypatch.delenv(v, raising=False)
+    with pytest.raises(LLMError, match="ANIMATH_API_KEY or ANTHROPIC_API_KEY"):
+        from_settings(Settings(), store)
+    monkeypatch.setenv("ANIMATH_API_KEY", "")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "fallback")
     on = from_settings(Settings(effort="max"), store)
     assert isinstance(on, Replay)
     assert isinstance(on.inner, Claude)
     assert on.inner.effort == "max"
+    assert on.inner.client.api_key == "fallback"
+    monkeypatch.setenv("ANIMATH_API_KEY", "primary")
+    assert api_key() == "primary"

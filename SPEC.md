@@ -163,7 +163,7 @@ animath/
 | Wrong mathematics (transcription, derivation) | equation check; provenance to source blocks; approval gate on $\mathcal{K}$ |
 | Desync, poor math speech | bookmarks; SRE rules; forced-alignment QA |
 | Licence contamination | subprocess boundary; `make licenses` |
-| No API key in the container | unit tests use the replay cache; live runs need `ANTHROPIC_API_KEY` as an environment secret |
+| No API key in the container | unit tests use the replay cache; live runs need `ANIMATH_API_KEY` (fallback `ANTHROPIC_API_KEY`) in the environment |
 | Heavy image (TeX, VTK, torch) | single pinned image; SVG and model caches |
 
 ## 7 Development plan

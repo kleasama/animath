@@ -37,7 +37,7 @@ Legend: ✓ done · ✱ in progress · ○ open · ⏸ checkpoint (review, commi
 | ⏸ C4 | Scene generation and pipeline review (auto-approved); integrated | ✓ |
 | 5.1 | WP9 orchestrator, resume, parallel scenes | ✓ |
 | 5.2 | WP9 evaluation harness ($Q_1$–$Q_7$) | ✓ |
-| 5.3 | WP9 end-to-end on golden set (live, needs `ANTHROPIC_API_KEY`) | ○ |
+| 5.3 | WP9 end-to-end on golden set (live, needs `ANIMATH_API_KEY`) | ○ |
 | ⏸ C5 | Release v0.1 | ○ |
 
 ## Notes
@@ -60,7 +60,7 @@ Legend: ✓ done · ✱ in progress · ○ open · ⏸ checkpoint (review, commi
 
 | # | Question | Default |
 |---|---|---|
-| O1 | `ANTHROPIC_API_KEY` environment secret | user approved; environment added 2026-10-07, verification by a fresh thread pending |
+| O1 | API key in the environment | `ANTHROPIC_API_KEY` is reserved by the platform and not passed to sessions; rename to `ANIMATH_API_KEY` (read first since 2026-10-07) |
 
 ## Known bugs
 
