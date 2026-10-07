@@ -44,10 +44,12 @@ def test_chunks() -> None:
 
 def test_prompt(doc: DocIR) -> None:
     known = Node(id="k", kind=NodeKind.CONCEPT, name="known", sources=("b0",))
-    full = prompt(doc.model_copy(update={"macros": {r"\R": r"\def\R{\mathbb R}"}}), [], [known])
+    macros = {r"\R": r"\def\R{\mathbb R}", r"\C": r"\def\C{\mathbb C}"}
+    full = prompt(doc.model_copy(update={"macros": macros}), [], [known])
     assert full.splitlines() == [
         "Document: EFIE",
         "Macros:",
+        r"\def\C{\mathbb C}",
         r"\def\R{\mathbb R}",
         "Known nodes:",
         "k (concept): known",

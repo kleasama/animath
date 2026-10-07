@@ -83,6 +83,7 @@ a hit returns the stored `DocIR` with zero usage. The orchestrator passes `fetch
 | `Para`, `Plain` | paragraph(s) and equation(s) |
 | `Math DisplayMath`, raw `equation`/`align`/`gather`/`multline` | equation; `align`$\to$`aligned`, `gather`,`multline`$\to$`gathered` |
 | `Div` of a theorem class (§5.4) / `proof` | theorem (`env` = class) / proof |
+| other `Div` with id (e.g. labelled `table`) | its blocks; the first unlabelled one takes the id as label |
 | `BulletList`, `OrderedList` | list, one line per item |
 | `Figure` | figure, `text` = caption |
 | `CodeBlock` | code |
@@ -98,7 +99,7 @@ a hit returns the stored `DocIR` with zero usage. The orchestrator passes `fetch
 2. Resolve `\input`/`\include` recursively relative to the entry directory; cycles and missing files raise.
 3. Macros: `\(re|provide|new)command`, `\DeclareMathOperator`, `\def` $\mapsto$ full declaration (`DocIR.macros`).
 4. Bibliography: `thebibliography` items; then `<entry>.bbl` if present, else `\bibliography`/`\addbibresource` `.bib` files (author, title, journal | booktitle, publisher, year).
-5. Replace `algorithm`/`algorithmic` environments by tokens; text = caption, then algorithmic(x) steps, one per line, indented by nesting.
+5. Expand `\newcolumntype` letters in `tabular`/`array`/`longtable` column specs (pandoc ignores them); replace `algorithm`/`algorithmic` environments by tokens; text = caption, then algorithmic(x) steps, one per line, indented by nesting.
 6. Pandoc `latex-auto_identifiers` (macros expanded in math); map by §5.3.
 
 **Algorithm 5.2 (PDF).**
