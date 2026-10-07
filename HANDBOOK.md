@@ -55,7 +55,7 @@ A stage is skipped iff an artifact is indexed under $k_\sigma$ (SPEC Invariants 
 ## 4 LLM access
 
 4.1 `LLM` protocol: `parse(schema, system, prompt, images) -> (instance, Usage)`.
-4.2 `Claude`: `beta.messages.parse` with `output_format=schema`, ephemeral cache on the system prompt, PNG images first, `output_config.effort`, server-side refusal fallback (`fallbacks="default"`). Any `stop_reason` other than `end_turn` raises `LLMError`.
+4.2 `Claude`: `beta.messages.stream` with `output_format=schema`, read by `get_final_message` (the SDK refuses non-streaming requests whose `max_tokens` may exceed 10 min, e.g. the default 32000), ephemeral cache on the system prompt, PNG images first, `output_config.effort`, server-side refusal fallback (`fallbacks="default"`). Any `stop_reason` other than `end_turn`, and output failing the schema (e.g. truncated at `max_tokens`), raise `LLMError`.
 4.3 `Replay`: key $d([\text{model:effort}, \text{JSON schema}, \text{system}, \text{prompt}, [d(\text{image}_i)]])$; hit returns cached instance with zero usage; offline miss raises `LLMError`. Unit tests run offline.
 
 ## 5 Ingestion
