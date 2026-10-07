@@ -9,22 +9,29 @@ from tests.narrate.conftest import tone
 RATE = 1000
 
 
+QUIET_LOUD_QUIET = np.concatenate([np.full(400, 20), np.full(100, 40), np.full(500, 20)])
+
+
 @pytest.mark.parametrize(
-    ("pcm", "span"),
+    ("pcm", "words", "span"),
     [
-        (tone(300, lead=200, tail=300), (150, 550)),
-        (tone(300), (0, 300)),
-        (tone(95, lead=3, tail=2), (0, 100)),
-        (np.concatenate([np.full(400, 20), np.full(100, 40), np.full(500, 20)]), (350, 550)),
+        (tone(300, lead=200, tail=300), (250, 450), (150, 550)),
+        (tone(300, lead=200, tail=300), (120, 700), (70, 750)),
+        (tone(300), (0, 300), (0, 300)),
+        (tone(95, lead=3, tail=2), (3, 98), (0, 100)),
+        (QUIET_LOUD_QUIET, (420, 480), (350, 550)),
+        (QUIET_LOUD_QUIET, (300, 900), (250, 950)),
     ],
 )
-def test_bounds_by_frame_rms_with_padding(pcm: np.ndarray, span: tuple[int, int]) -> None:
-    assert bounds(pcm.astype(np.int16), RATE) == span
+def test_bounds_cover_loud_frames_and_words_with_padding(
+    pcm: np.ndarray, words: tuple[int, int], span: tuple[int, int]
+) -> None:
+    assert bounds(pcm.astype(np.int16), RATE, words) == span
 
 
 def test_bounds_rejects_silence_below_floor() -> None:
     with pytest.raises(NarrateError, match="silent"):
-        bounds(np.full(100, 32, np.int16), RATE)
+        bounds(np.full(100, 32, np.int16), RATE, (0, 100))
 
 
 def test_fade_is_raised_cosine_at_both_ends() -> None:
@@ -45,17 +52,17 @@ def test_timeline_layout_words_and_marks() -> None:
     )
     u2 = ("x.", {"m3": 0, "end": 4}, 1.0, tone(100, lead=60), [(0, 160)])
     audio, words, marks = timeline([u1, u2], RATE)
-    assert audio.size == 300 + 400 + 600 + 150 + 1000
+    assert audio.size == 300 + 550 + 450 + 160 + 1000
     assert not audio[:300].any()
     assert not audio[700:1300].any()
-    assert not audio[1450:].any()
-    assert max(abs(int(audio[300])), abs(int(audio[699]))) < 10
+    assert not audio[1460:].any()
+    assert (audio[400], audio[699]) == (8000, 8000)
     assert [(w.text, w.start, w.end) for w in words] == [
-        ("ab", 0.3, 0.41),
-        ("cdefg,", 0.45, 0.7),
-        ("x.", 1.3, 1.45),
+        ("ab", 0.35, 0.46),
+        ("cdefg,", 0.5, 0.8),
+        ("x.", 1.3, 1.46),
     ]
-    assert marks == {"m1": 0.3, "m2": 0.45, "m3": 1.3, "end": 1.3}
+    assert marks == {"m1": 0.35, "m2": 0.5, "m3": 1.3, "end": 1.3}
     n = Narration(
         scene_id="s",
         audio="0" * 64,
@@ -65,7 +72,7 @@ def test_timeline_layout_words_and_marks() -> None:
     )
     assert n.duration_s - n.words[-1].end == pytest.approx(1.0)
     short = timeline([(*u2[:2], 0.3, *u2[3:])], RATE)[0]
-    assert short.size == 300 + 150 + 600
+    assert short.size == 300 + 160 + 600
 
 
 def test_captions_time_written_tokens_by_their_spoken_words() -> None:

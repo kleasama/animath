@@ -1,4 +1,5 @@
 import threading
+from itertools import accumulate, pairwise
 from pathlib import Path
 
 import pytest
@@ -14,20 +15,27 @@ SAY = 'r = json.load(sys.stdin); print(json.dumps(["ex " * len(t) for t in r["la
 
 
 class FakeTTS:
-    """Each word is 40 samples of tone after 3 silent samples; 9 silent samples close."""
+    """Each word is 40 samples of tone at speed 1 after 3 silent samples; 9 silent samples close.
+
+    At 1500 wpm the speed is 1.
+    """
 
     id = "fake:1"
     rate = 1000
+    wpm = 1500
 
     def __init__(self) -> None:
-        self.calls: list[str] = []
+        self.calls: list[tuple[str, float]] = []
         self.lock = threading.Lock()
 
-    def synth(self, text: str) -> tuple[PCM, Spans]:
+    def natural(self, text: str) -> float:
+        return 0.04 * len(text.split())
+
+    def synth(self, text: str, speed: float = 1.0) -> tuple[PCM, Spans]:
         with self.lock:
-            self.calls.append(text)
-        n = len(text.split())
-        return tone(40 * n, lead=3, tail=9), [(3 + 40 * i, 43 + 40 * i) for i in range(n)]
+            self.calls.append((text, speed))
+        n, w = len(text.split()), round(40 / speed)
+        return tone(w * n, lead=3, tail=9), [(3 + w * i, 3 + w * (i + 1)) for i in range(n)]
 
 
 @pytest.fixture
@@ -70,17 +78,17 @@ def test_narrate_produces_valid_narrations(store: Store, verbalizer: Verbalizer)
     tts = FakeTTS()
     out = narrate(BOARD, store, tts, verbalizer)
     assert list(out) == ["s1", "s2"]
-    assert tts.calls == ["Minimise ex over K.", "Stop.", "Restart."]
+    assert tts.calls == [("Minimise ex over K.", 1.0), ("Stop.", 1.0), ("Restart.", 1.0)]
     n = store.get(Narration, out["s1"])
     assert n.scene_id == "s1"
     assert n.bookmarks == {"k": 0.303}
     assert [w.text for w in n.words] == ["Minimise", "ex", "over", "K.", "Stop."]
     assert [c.text for c in n.captions] == ["Minimise", "r", "over", "K.", "Stop."]
     assert [(c.start, c.end) for c in n.captions] == [(w.start, w.end) for w in n.words]
-    assert (n.words[3].end, n.words[4].start) == (0.463, 0.875)
-    assert n.duration_s == (300 + 172 + 400 + 52 + 600) / 1000
-    assert from_wav(store.get_blob(n.audio), 1000).size == 1524
-    assert store.lookup(Narration, key(BOARD.scenes[1], tts, verbalizer)) is not None
+    assert (n.words[3].end, n.words[4].start) == (0.463, 0.725)
+    assert n.duration_s == (300 + 172 + 250 + 52 + 600) / 1000
+    assert from_wav(store.get_blob(n.audio), 1000).size == 1374
+    assert store.lookup(Narration, key(BOARD.scenes[1], tts, verbalizer, 1.0)) is not None
 
 
 def test_pause_moves_the_next_bookmark(store: Store, verbalizer: Verbalizer) -> None:
@@ -97,28 +105,53 @@ def test_pause_moves_the_next_bookmark(store: Store, verbalizer: Verbalizer) -> 
     assert n1.duration_s - n0.duration_s == pytest.approx(1.25)
 
 
-def test_cached_scenes_are_skipped(store: Store, verbalizer: Verbalizer, tmp_path: Path) -> None:
+def test_one_speed_brings_the_storyboard_to_wpm(store: Store, verbalizer: Verbalizer) -> None:
+    class Wordy(FakeTTS):
+        """Each word lasts 10 ms per character at speed 1."""
+
+        wpm = 750
+
+        def natural(self, text: str) -> float:
+            return 0.01 * len(text.replace(" ", ""))
+
+        def synth(self, text: str, speed: float = 1.0) -> tuple[PCM, Spans]:
+            self.calls.append((text, speed))
+            ends = list(accumulate([3] + [round(10 * len(w) / speed) for w in text.split()]))
+            return tone(ends[-1] - 3, lead=3, tail=9), list(pairwise(ends))
+
+    tts = Wordy()
+    lines = Line(text="Wait here.", bookmark="a"), Line(text="Go on now.", bookmark="b")
+    board = Storyboard(title="t", scenes=(scene("s", *lines), scene("u", Line(text="Go."))))
+    out = narrate(board, store, tts, verbalizer)
+    assert tts.calls == [("Wait here.", 0.42), ("Go on now.", 0.42), ("Go.", 0.42)]
+    words = [w for sid in "su" for w in store.get(Narration, out[sid]).words]
+    assert [round(w.end - w.start, 3) for w in words] == [0.095, 0.119, 0.048, 0.048, 0.095, 0.071]
+    assert sum(w.end - w.start for w in words) == pytest.approx(60 * 6 / 750, rel=0.01)
+
+
+def test_cached_scenes_skip_synthesis(store: Store, verbalizer: Verbalizer) -> None:
     first = narrate(BOARD, store, FakeTTS(), verbalizer)
     tts = FakeTTS()
     edited = Storyboard(
         title="GMRES",
         scenes=(BOARD.scenes[0], scene("s2", Line(text="Restart now.", bookmark="r"))),
     )
-    second = narrate(edited, store, tts, Verbalizer(cmd=["/nonexistent"]))
+    second = narrate(edited, store, tts, verbalizer)
     assert second["s1"] == first["s1"]
     assert second["s2"] != first["s2"]
-    assert tts.calls == ["Restart now."]
+    assert tts.calls == [("Restart now.", 1.0)]
 
 
-def test_key_ignores_visuals_and_tracks_backends(verbalizer: Verbalizer) -> None:
+def test_key_ignores_visuals_and_tracks_backends_and_speed(verbalizer: Verbalizer) -> None:
     s = BOARD.scenes[0]
     tts = FakeTTS()
     moved = s.model_copy(update={"visuals": (Visual(primitive="equation", at="k"),)})
-    assert key(moved, tts, verbalizer) == key(s, tts, verbalizer)
+    assert key(moved, tts, verbalizer, 1.0) == key(s, tts, verbalizer, 1.0)
     other = FakeTTS()
     other.id = "fake:2"
-    assert key(s, other, verbalizer) != key(s, tts, verbalizer)
-    assert key(s, tts, Verbalizer("mathspeak")) != key(s, tts, verbalizer)
+    assert key(s, other, verbalizer, 1.0) != key(s, tts, verbalizer, 1.0)
+    assert key(s, tts, Verbalizer("mathspeak"), 1.0) != key(s, tts, verbalizer, 1.0)
+    assert key(s, tts, verbalizer, 0.81) != key(s, tts, verbalizer, 0.82)
 
 
 def test_parallel_matches_serial(tmp_path: Path, verbalizer: Verbalizer) -> None:

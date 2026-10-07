@@ -2,7 +2,7 @@ import hashlib
 import io
 import json
 import wave
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from itertools import pairwise
 from pathlib import Path
 from typing import Protocol
@@ -22,13 +22,18 @@ Spans = list[tuple[int, int]]
 class TTS(Protocol):
     """Text to mono 16-bit PCM at `rate` Hz with the sample span of each whitespace-separated word.
 
-    `id` determines the output for a given text.
+    `natural` is the speech length in seconds at speed 1, which `synth` divides by `speed`;
+    `wpm` is the target rate in spoken words per minute. `id` determines the output for a given
+    text and speed.
     """
 
     id: str
     rate: int
+    wpm: int
 
-    def synth(self, text: str) -> tuple[PCM, Spans]: ...
+    def natural(self, text: str) -> float: ...
+
+    def synth(self, text: str, speed: float = 1.0) -> tuple[PCM, Spans]: ...
 
 
 def to_wav(pcm: PCM, rate: int) -> bytes:
@@ -65,17 +70,21 @@ class Espeak:
 
     rate = 22050
 
-    def __init__(self, voice: str = "en-us", wpm: int = 140, cmd: str = "espeak-ng") -> None:
+    def __init__(self, voice: str = "en-us", wpm: int = 135, cmd: str = "espeak-ng") -> None:
         self.voice, self.wpm, self.cmd = voice, wpm, cmd
         self.id = f"espeak-ng:{voice}:{wpm}:{digest_of([g2p.LEXICON, sorted(g2p.WORDS)])[:8]}"
 
-    def synth(self, text: str) -> tuple[PCM, Spans]:
+    def natural(self, text: str) -> float:
+        """Nominal length at `wpm`: espeak-ng's `-s` already counts words."""
+        return 60 * len(text.split()) / self.wpm
+
+    def synth(self, text: str, speed: float = 1.0) -> tuple[PCM, Spans]:
         words = text.split()
         said = [
             p + s + q
             for (p, _, q), s in zip(map(g2p.split, words), g2p.speakable(words), strict=True)
         ]
-        cmd = [self.cmd, "-v", self.voice, "-s", str(self.wpm), "--stdout"]
+        cmd = [self.cmd, "-v", self.voice, "-s", str(round(self.wpm * speed)), "--stdout"]
         pcm = from_wav(run(cmd, " ".join(said).encode()), self.rate)
         return pcm, spread(words, pcm.size)
 
@@ -100,52 +109,93 @@ def _read(data: bytes, pos: int) -> tuple[int, int]:
     return value | data[pos] << shift, pos + 1
 
 
-def with_output(model: bytes, name: str) -> bytes:
-    """ONNX `model` with tensor `name` appended to the graph outputs.
+def fields(buf: bytes, pos: int, end: int) -> Iterator[tuple[int, int, int, int]]:
+    """(number, start, payload start, end) of each protobuf field in buf[pos:end]; only varint and
+    length-delimited fields occur in ONNX models."""
+    while pos < end:
+        start = pos
+        key, pos = _read(buf, pos)
+        if key & 7 not in (0, 2):
+            raise NarrateError(f"unexpected wire type {key & 7} in ONNX model")
+        n, pos = _read(buf, pos)
+        yield key >> 3, start, pos, pos + n * (key & 7 == 2)
+        pos += n * (key & 7 == 2)
+    if pos != end:
+        raise NarrateError("truncated ONNX model")
 
-    Top-level ModelProto fields are varints or length-delimited; field 7 is the GraphProto,
-    whose field 12 lists the outputs (ValueInfoProto, field 1 = name).
+
+def with_outputs(model: bytes, names: Sequence[str], prune: bool = False) -> bytes:
+    """ONNX `model` with tensors `names` appended to the graph outputs or, if `prune`, as its only
+    outputs with only the nodes and initializers they depend on.
+
+    ModelProto field 7 is the GraphProto: nodes 1 (NodeProto: inputs 1, outputs 2), initializers 5
+    (TensorProto: name 8), outputs 12 (ValueInfoProto: name 1). Nodes are in topological order.
     """
-    pos = 0
+    m = memoryview(model)
+
+    def strings(lo: int, hi: int, tag: int) -> set[str]:
+        return {bytes(m[a:b]).decode() for f, _, a, b in fields(model, lo, hi) if f == tag}
+
     try:
-        while pos < len(model):
-            start = pos
-            key, pos = _read(model, pos)
-            if key & 7 not in (0, 2):
-                raise NarrateError(f"unexpected wire type {key & 7} in ONNX model")
-            n, pos = _read(model, pos)
-            if key == 7 << 3 | 2:
-                extra, m = _field(12, _field(1, name.encode())), memoryview(model)
-                head = _uvarint(key) + _uvarint(n + len(extra))
-                return b"".join([m[:start], head, m[pos : pos + n], extra, m[pos + n :]])
-            pos += n if key & 7 else 0
+        _, start, lo, hi = next(f for f in fields(model, 0, len(model)) if f[0] == 7)
+        parts = list(fields(model, lo, hi))
+        need, keep, made = set(names), set(), set()
+        for f, a, b, c in reversed(parts):
+            if f == 1:
+                made |= (outs := strings(b, c, 2))
+                if outs & need:
+                    keep.add(a)
+                    need |= strings(b, c, 1)
+        if prune:
+            parts = [
+                (f, a, b, c)
+                for f, a, b, c in parts
+                if f != 12 and (f != 1 or a in keep) and (f != 5 or strings(b, c, 8) & need)
+            ]
+    except StopIteration:
+        raise NarrateError("ONNX model has no graph") from None
     except IndexError as e:
         raise NarrateError("truncated ONNX model") from e
-    raise NarrateError("ONNX model has no graph")
+    if missing := sorted(set(names) - made):
+        raise NarrateError(f"no node of the ONNX model computes {missing}")
+    body = b"".join(
+        [*(m[a:c] for _, a, _, c in parts), *(_field(12, _field(1, n.encode())) for n in names)]
+    )
+    return b"".join([m[:start], _uvarint(7 << 3 | 2), _uvarint(len(body)), body, m[hi:]])
+
+
+def fit(d: npt.NDArray[np.float32], speed: float) -> float:
+    """Speed input near `speed` for which Kokoro's frame counts max(1, round(d/s)) of the
+    unrounded counts d at speed 1 sum closest to sum(d)/speed; ties go to the nearest speed."""
+    s = (speed * (1 + np.arange(-200, 201) / 1000)).astype(np.float32)
+    err = np.abs(np.maximum(1, np.round(d[None] / s[:, None])).sum(1) - d.sum() / speed)
+    return float(s[np.lexsort((np.abs(s - speed), err))[0]])
 
 
 class Kokoro:
     """Kokoro-82M v1.0 ONNX, release `model-files-v1.0` of thewh1teagle/kokoro-onnx.
 
     `root` holds `kokoro-v1.0.onnx`, `voices-v1.0.bin` (npz, voice -> 510 x 1 x 256 float32) and
-    `config.json` (key `vocab`). Word spans come from the predicted token durations. Speech runs at
-    about `wpm_per_speed` * speed words per minute, pauses included.
+    `config.json` (key `vocab`). Word spans come from the predicted token durations, which the model
+    rounds to whole frames after dividing by the speed input; `predictor` is the graph pruned to the
+    unrounded durations at speed 1, from which `synth` picks the input that scales them exactly.
     """
 
-    rate, hop, max_tokens, headroom, wpm_per_speed = 24000, 600, 510, 0.5, 165
-    model, voices, durations = "kokoro-v1.0.onnx", "voices-v1.0.bin", "/encoder/Clip_output_0"
+    rate, hop, max_tokens, headroom = 24000, 600, 510, 0.5
+    model, voices = "kokoro-v1.0.onnx", "voices-v1.0.bin"
+    durations, predicted = "/encoder/Clip_output_0", "/encoder/predictor/ReduceSum_output_0"
 
     def __init__(
         self,
         root: Path,
         voice: str = "af_heart",
-        speed: float = 0.85,
+        wpm: int = 135,
         threads: int = 1,
         espeak: str = "espeak-ng",
     ) -> None:
         import onnxruntime as ort  # type: ignore[import-untyped]
 
-        self.speed = speed
+        self.wpm = wpm
         try:
             self.vocab: dict[str, int] = json.loads((root / "config.json").read_text())["vocab"]
             with np.load(root / self.voices, allow_pickle=False) as v:
@@ -153,8 +203,12 @@ class Kokoro:
             model = (root / self.model).read_bytes()
             opts = ort.SessionOptions()
             opts.intra_op_num_threads, opts.inter_op_num_threads = threads, 1
-            self.session = ort.InferenceSession(
-                with_output(model, self.durations), opts, providers=["CPUExecutionProvider"]
+            self.session, self.predictor = (
+                ort.InferenceSession(m, opts, providers=["CPUExecutionProvider"])
+                for m in (
+                    with_outputs(model, [self.durations]),
+                    with_outputs(model, [self.predicted], prune=True),
+                )
             )
         except Exception as e:
             raise NarrateError(f"invalid Kokoro model directory {root}: {e}") from e
@@ -166,7 +220,7 @@ class Kokoro:
                 "kokoro",
                 hashlib.sha256(model).hexdigest()[:16],
                 voice,
-                str(speed),
+                f"{wpm}wpm",
                 digest_of(tables)[:8],
             ]
         )
@@ -197,22 +251,42 @@ class Kokoro:
             out += ids + [self.vocab[c] for c in post if c in self.vocab] + [self.vocab[" "]]
         return out[:-1], ranges
 
-    def synth(self, text: str) -> tuple[PCM, Spans]:
+    def chunks(self, text: str) -> Iterator[tuple[list[int], Spans]]:
+        """Token ids and word token ranges of each piece of `text`."""
         words = self.g2p.words(text)
-        audio: list[npt.NDArray[np.float32]] = []
-        spans: Spans = []
-        at = 0
         for lo, hi in self.pieces(words, 0, len(words)):
             tok, ranges = self.tokens(words[lo:hi])
             if not any(b > a for a, b in ranges):
                 raise NarrateError(f"nothing to pronounce in {text!r}")
             if len(tok) > self.max_tokens:
                 raise NarrateError(f"{len(tok)} tokens exceed {self.max_tokens} in {text!r}")
-            feed = {
-                "tokens": np.array([[0, *tok, 0]], dtype=np.int64),
-                "style": self.style[len(tok) - 1][None],
-                "speed": np.array([self.speed], dtype=np.float32),
-            }
+            yield tok, ranges
+
+    def feed(self, tok: Sequence[int], speed: float) -> dict[str, npt.NDArray[np.generic]]:
+        return {
+            "tokens": np.array([[0, *tok, 0]], dtype=np.int64),
+            "style": self.style[len(tok) - 1][None],
+            "speed": np.array([speed], dtype=np.float32),
+        }
+
+    def predict(self, tok: Sequence[int]) -> npt.NDArray[np.float32]:
+        """Unrounded frames at speed 1 of each token of the padded sequence."""
+        (d,) = self.predictor.run(None, self.feed(tok, 1.0))
+        return np.ravel(d).astype(np.float32)
+
+    def natural(self, text: str) -> float:
+        """Seconds from the start of the first word to the end of the last at speed 1."""
+        parts = [(self.predict(t), r) for t, r in self.chunks(text)]
+        (d0, r0), (d1, r1) = parts[0], parts[-1]
+        head, tail = float(d0[: r0[0][0] + 1].sum()), float(d1[r1[-1][1] + 1 :].sum())
+        return (sum(float(d.sum()) for d, _ in parts) - head - tail) * self.hop / self.rate
+
+    def synth(self, text: str, speed: float = 1.0) -> tuple[PCM, Spans]:
+        audio: list[npt.NDArray[np.float32]] = []
+        spans: Spans = []
+        at = 0
+        for tok, ranges in self.chunks(text):
+            feed = self.feed(tok, fit(self.predict(tok), speed))
             wave_, dur = self.session.run(None, feed)
             frames = self.hop * np.concatenate([[0], np.cumsum(np.ravel(dur))]).astype(int)
             spans += [(at + int(frames[a + 1]), at + int(frames[b + 1])) for a, b in ranges]
