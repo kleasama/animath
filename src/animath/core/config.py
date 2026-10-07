@@ -20,6 +20,7 @@ class Settings(Model):
     max_tokens: int = Field(32000, ge=1024, le=128000)
     workers: int = Field(os.cpu_count() or 1, ge=1)
     offline: bool = False
+    llm: Literal["api", "session"] = "api"
 
 
 def load(path: Path | None = None, env: Mapping[str, str] = os.environ) -> Settings:

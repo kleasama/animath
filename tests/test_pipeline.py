@@ -315,3 +315,13 @@ def test_cli(
     assert "invalid parameters" in capsys.readouterr().err
     assert main(["eval", digest_of(m), "--expected", str(tmp_path / "none.json")]) == 1
     assert "cannot read" in capsys.readouterr().err
+
+
+def test_cli_session_pending(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("ANIMATH_STORE", str(tmp_path))
+    monkeypatch.setenv("ANIMATH_LLM", "session")
+    assert main(["run", str(GOLDEN / "efie/efie.md")]) == 0
+    (d,) = json.loads(capsys.readouterr().out)["pending"]
+    assert json.loads((Path(d) / "request.json").read_text())["schema"]["title"] == "Draft"
