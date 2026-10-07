@@ -12,7 +12,7 @@ Media = Callable[..., str]
 
 @pytest.fixture
 def media(tmp_path: Path, store: Store) -> Media:
-    """Blob of a clip ('v': testsrc2) or narration ('a': sine, 'silent': anullsrc)."""
+    """Blob of a clip ('v': testsrc2) or narration ('a': sine, 'silent', 'peaky': + impulses)."""
 
     def make(kind: str, dur: float, size: str = "64x36", fps: int = 15) -> str:
         out = tmp_path / f"m{len(list(tmp_path.iterdir()))}.{'mp4' if kind == 'v' else 'wav'}"
@@ -20,6 +20,7 @@ def media(tmp_path: Path, store: Store) -> Media:
             "v": f"testsrc2=size={size}:rate={fps}:duration={dur}",
             "a": f"sine=frequency=440:sample_rate=24000:duration={dur}",
             "silent": f"anullsrc=r=24000:cl=mono:d={dur}",
+            "peaky": f"aevalsrc=0.1*sin(2*PI*440*t)+0.8*eq(mod(n\\,12000)\\,6000):s=24000:d={dur}",
         }[kind]
         codec = ["-c:v", "libx264", "-pix_fmt", "yuv420p"] if kind == "v" else []
         subprocess.run(

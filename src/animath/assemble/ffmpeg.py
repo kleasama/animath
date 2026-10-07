@@ -10,8 +10,9 @@ from pathlib import Path
 from animath.core.errors import AssembleError
 
 RATE = 48000
-TARGET = "I=-16:TP=-1.5:LRA=11"
-MEASURED = ("input_i", "input_tp", "input_lra", "input_thresh", "target_offset")
+LUFS, CEILING_DB = -16.0, -2.5
+TARGET = f"I={LUFS}:TP=-1.5:LRA=11"
+MEASURED = ("input_i", "input_tp")
 BITEXACT = ["-fflags", "+bitexact", "-flags:v", "+bitexact", "-flags:a", "+bitexact"]
 
 
@@ -85,7 +86,7 @@ def _inputs(paths: Sequence[Path]) -> list[str]:
 
 
 def loudness(audios: Sequence[Path], samples: Sequence[int]) -> dict[str, float]:
-    """Pass 1 of EBU R128 normalization over the concatenated, trimmed narration."""
+    """Integrated loudness (LUFS) and true peak (dBTP) of the concatenated, trimmed audio."""
     n = len(audios)
     graph = ";".join(_audio(i, i, s) for i, s in enumerate(samples))
     graph += ";" + "".join(f"[a{i}]" for i in range(n))
@@ -113,22 +114,16 @@ def encode(
     threads: int,
     out: Path,
 ) -> None:
-    """Pass 2: concat, linear loudnorm, H.264 High yuv420p CRF 18, AAC 48 kHz, faststart."""
+    """Concat; gain to LUFS, peak limiter at CEILING_DB; H.264 High yuv420p CRF 18, AAC 48 kHz."""
     n = len(clips)
-    norm = ":".join(
-        [
-            TARGET,
-            *(f"measured_{k[6:]}={measured[k]}" for k in MEASURED[:4]),
-            f"offset={measured['target_offset']}",
-            "linear=true",
-        ]
-    )
+    gain = LUFS - measured["input_i"]
+    limit = f"limit={10 ** (CEILING_DB / 20):.4f}:attack=5:release=80:level=false:latency=true"
     graph = ";".join(
         [_video(i, i, f, fps) for i, f in enumerate(frames)]
         + [_audio(n + i, i, s) for i, s in enumerate(samples)]
     )
     graph += ";" + "".join(f"[v{i}][a{i}]" for i in range(n))
-    graph += f"concat=n={n}:v=1:a=1[v][c];[c]loudnorm={norm},aresample={RATE}[a]"
+    graph += f"concat=n={n}:v=1:a=1[v][c];[c]volume={gain:.2f}dB,alimiter={limit}[a]"
     run(
         [
             *("ffmpeg", "-nostdin", "-hide_banner", "-y", *_inputs(clips), *_inputs(audios)),

@@ -11,7 +11,7 @@ from animath.core.errors import AssembleError
 from animath.core.schemas import Manifest, Narration, SceneRender, Storyboard
 from animath.core.store import Store
 
-VERSION = "0.1"
+VERSION = "0.2"
 TOL_S = 0.1
 
 
@@ -86,6 +86,7 @@ def assemble(
             v.duration_s - total
         ) > TOL_S:
             raise AssembleError(f"output {v}, {a} does not match timeline of {total:.3f} s")
+        final = ffmpeg.loudness([out], [sum(samples)])
         video = store.put_blob(out.read_bytes())
 
     manifest = Manifest(
@@ -102,6 +103,8 @@ def assemble(
             "duration_s": total,
             "loudness_in_lufs": measured["input_i"],
             "true_peak_in_dbtp": measured["input_tp"],
+            "loudness_out_lufs": final["input_i"],
+            "true_peak_out_dbtp": final["input_tp"],
         },
     )
     return store.put(manifest, key)

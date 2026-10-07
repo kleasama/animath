@@ -3,45 +3,58 @@ import pytest
 
 from animath.core.errors import NarrateError
 from animath.core.schemas import Narration
-from animath.narrate.align import THRESHOLD, timeline, voiced
+from animath.narrate.align import bounds, fade, timeline
 from tests.narrate.conftest import tone
 
+RATE = 1000
 
-def test_voiced_bounds() -> None:
-    assert voiced(tone(100, lead=7, tail=30)) == (7, 107)
-    quiet = np.full(50, THRESHOLD, dtype=np.int16)
+
+@pytest.mark.parametrize(
+    ("pcm", "span"),
+    [
+        (tone(300, lead=200, tail=300), (150, 550)),
+        (tone(300), (0, 300)),
+        (tone(95, lead=3, tail=2), (0, 100)),
+        (np.concatenate([np.full(400, 20), np.full(100, 40), np.full(500, 20)]), (350, 550)),
+    ],
+)
+def test_bounds_by_frame_rms_with_padding(pcm: np.ndarray, span: tuple[int, int]) -> None:
+    assert bounds(pcm.astype(np.int16), RATE) == span
+
+
+def test_bounds_rejects_silence_below_floor() -> None:
     with pytest.raises(NarrateError, match="silent"):
-        voiced(quiet)
+        bounds(np.full(100, 32, np.int16), RATE)
 
 
-def test_timeline_trims_gaps_and_marks_onsets() -> None:
-    rate = 1000
-    lines = [
-        ("ab cdefg", "m1", tone(300, lead=50, tail=80)),
-        ("x", None, tone(100, lead=5)),
-        ("go", "m2", tone(200, tail=1)),
-    ]
-    audio, words, marks = timeline(lines, rate, gap_s=0.1)
-    assert audio.size == 300 + 100 + 100 + 100 + 200
-    assert marks == {"m1": 0.0, "m2": 0.6}
+def test_fade_is_raised_cosine_at_both_ends() -> None:
+    y = fade(np.full(100, 1000, np.int16), RATE)
+    assert (y[0], y[9]) == (6, 994)
+    assert np.all(y[10:90] == 1000)
+    assert np.array_equal(y, y[::-1])
+    assert fade(np.array([5], np.int16), RATE).tolist() == [5]
+
+
+def test_timeline_layout_words_and_marks() -> None:
+    u1 = ("ab cdefg,", {"m1": 0, "m2": 1}, tone(300, lead=200, tail=300), [(150, 260), (300, 600)])
+    u2 = ("x.", {"m3": 0, "end": 4}, tone(100, lead=60), [(0, 160)])
+    audio, words, marks = timeline([u1, u2], RATE)
+    assert audio.size == 300 + 400 + 400 + 150 + 600
+    assert not audio[:300].any()
+    assert not audio[700:1100].any()
+    assert not audio[1250:].any()
+    assert max(abs(int(audio[300])), abs(int(audio[699]))) < 10
     assert [(w.text, w.start, w.end) for w in words] == [
-        ("ab", 0.0, 0.1),
-        ("cdefg", 0.1, 0.3),
-        ("x", 0.4, 0.5),
-        ("go", 0.6, 0.8),
+        ("ab", 0.3, 0.41),
+        ("cdefg,", 0.45, 0.7),
+        ("x.", 1.1, 1.25),
     ]
+    assert marks == {"m1": 0.3, "m2": 0.45, "m3": 1.1, "end": 1.1}
     n = Narration(
         scene_id="s",
         audio="0" * 64,
-        duration_s=audio.size / rate,
+        duration_s=audio.size / RATE,
         words=tuple(words),
         bookmarks=marks,
     )
-    assert n.words[-1].end == n.duration_s
-
-
-def test_timeline_empty() -> None:
-    audio, words, marks = timeline([], 1000)
-    assert audio.size == 0
-    assert words == []
-    assert marks == {}
+    assert n.duration_s - n.words[-1].end == pytest.approx(0.6)

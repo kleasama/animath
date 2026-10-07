@@ -284,6 +284,7 @@ def test_cli(
     monkeypatch.setenv("ANIMATH_STORE", str(s.store))
     monkeypatch.setenv("ANIMATH_OFFLINE", "1")
     monkeypatch.setenv("ANIMATH_WORKERS", "1")
+    monkeypatch.delenv("ANIMATH_KOKORO", raising=False)
     monkeypatch.setattr(
         pipeline, "Pipeline", partial(Pipeline, animate=clip, fetch=None, check=None)
     )

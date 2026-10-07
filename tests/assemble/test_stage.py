@@ -75,6 +75,18 @@ def test_assemble_end_to_end(store: Store, two: Two) -> None:
     assert out["input_tp"] <= -1.0
 
 
+def test_peaky_narration_meets_loudness_and_true_peak(store: Store, two: Two, media: Media) -> None:
+    board, renders, narrations = two
+    clicks = [
+        _redo(store, d, Narration, audio=media("peaky", 0.8 + k / 10))
+        for k, d in enumerate(narrations)
+    ]
+    m = store.get(Manifest, st.assemble(store, board, renders, clicks))
+    assert m.metrics["true_peak_in_dbtp"] - m.metrics["loudness_in_lufs"] > 14.5
+    assert m.metrics["loudness_out_lufs"] == pytest.approx(ffmpeg.LUFS, abs=1.0)
+    assert m.metrics["true_peak_out_dbtp"] <= -1.5
+
+
 def test_cached_and_deterministic(store: Store, two: Two, monkeypatch: pytest.MonkeyPatch) -> None:
     board, renders, narrations = two
     d = st.assemble(store, board, renders, narrations)
