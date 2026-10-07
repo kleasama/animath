@@ -21,7 +21,7 @@ from animath.core.schemas import (
 )
 from animath.core.store import Store
 from animath.eval import evaluate, metrics
-from animath.llm import from_settings
+from animath.llm import PendingError, from_settings, pending
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -119,6 +119,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         else:
             cmd = {"run": _run, "stage": _stage, "eval": _eval}[args.cmd]
             out = json.dumps(cmd(args, settings), indent=2)
+    except PendingError:
+        out = json.dumps(
+            {"pending": [str(p) for p in pending(settings.store / "pending")]}, indent=2
+        )
     except AnimathError as e:
         print(f"animath: {e}", file=sys.stderr)
         return 1

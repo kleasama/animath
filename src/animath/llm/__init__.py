@@ -1,6 +1,9 @@
 import base64
+import json
 import os
+import tempfile
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Any, Protocol
 
 import anthropic
@@ -95,6 +98,46 @@ class Replay:
         return out, usage
 
 
+class PendingError(LLMError):
+    """A session-mode request awaits its answer."""
+
+
+class Session:
+    """LLM answered out of band: a miss writes `<root>/<key>/request.json` (schema, system,
+    prompt, image files `<i>.png`) and raises `PendingError`; `<key>/answer.json` is the reply."""
+
+    def __init__(self, root: Path) -> None:
+        self.root = root
+
+    def parse[T: BaseModel](
+        self, schema: type[T], system: str, prompt: str, images: Sequence[bytes] = ()
+    ) -> tuple[T, Usage]:
+        js = schema.model_json_schema()
+        d = self.root / digest_of([js, system, prompt, [digest(i) for i in images]])
+        if (a := d / "answer.json").exists():
+            try:
+                return schema.model_validate_json(a.read_bytes()), Usage()
+            except ValidationError as e:
+                raise LLMError(f"invalid answer {a}: {e}") from e
+        d.mkdir(parents=True, exist_ok=True)
+        for i, img in enumerate(images):
+            (d / f"{i}.png").write_bytes(img)
+        req = {"schema": js, "system": system, "prompt": prompt}
+        req["images"] = [f"{i}.png" for i in range(len(images))]
+        fd, tmp = tempfile.mkstemp(dir=d, suffix=".tmp")
+        with os.fdopen(fd, "w") as f:
+            json.dump(req, f, indent=1, ensure_ascii=False)
+        os.replace(tmp, d / "request.json")
+        raise PendingError(f"{schema.__name__} request pending in {d}")
+
+
+def pending(root: Path) -> list[Path]:
+    """Unanswered session requests under `root`."""
+    return sorted(
+        p.parent for p in root.glob("*/request.json") if not p.with_name("answer.json").exists()
+    )
+
+
 KEY_VARS = ("ANIMATH_API_KEY", "ANTHROPIC_API_KEY")
 
 
@@ -105,9 +148,15 @@ def api_key() -> str:
     return key
 
 
+def tag(s: Settings) -> str:
+    """Provenance of LLM responses: the answering source and, for the API, model and effort."""
+    return "session" if s.llm == "session" else f"{s.model}:{s.effort}"
+
+
 def from_settings(s: Settings, store: Store) -> LLM:
-    tag = f"{s.model}:{s.effort}"
     if s.offline:
-        return Replay(store, None, tag)
+        return Replay(store, None, tag(s))
+    if s.llm == "session":
+        return Replay(store, Session(s.store / "pending"), tag(s))
     client = anthropic.Anthropic(api_key=api_key())
-    return Replay(store, Claude(s.model, s.effort, s.max_tokens, client), tag)
+    return Replay(store, Claude(s.model, s.effort, s.max_tokens, client), tag(s))

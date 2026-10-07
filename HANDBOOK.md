@@ -25,7 +25,7 @@ Reference for a developer at any pickup point.
 | `.venv/bin/animath stage <name> <digest> [-p k=v]` | one stage on a stored input (F11) |
 | `.venv/bin/animath eval <manifest> [--expected doc.json] [--judge]` | $Q_1$–$Q_7$, $N_1$ (§12.5) |
 
-2.3 Settings (`core.config.Settings`): defaults, then TOML file (`--config`), then `ANIMATH_<FIELD>` variables. Fields: `store`, `model`, `effort`, `max_tokens`, `workers`, `offline`. Online, the API key is `ANIMATH_API_KEY`, else `ANTHROPIC_API_KEY` (reserved in cloud environments); none raises `LLMError`.
+2.3 Settings (`core.config.Settings`): defaults, then TOML file (`--config`), then `ANIMATH_<FIELD>` variables. Fields: `store`, `model`, `effort`, `max_tokens`, `workers`, `offline`, `llm` (`api` or `session`). Online, the API key is `ANIMATH_API_KEY`, else `ANTHROPIC_API_KEY` (reserved in cloud environments); none raises `LLMError`.
 2.4 Image: `docker/Dockerfile` (TeX Live, dvisvgm, ffmpeg, pandoc, cairo/pango, espeak-ng, node, gfortran).
 
 ## 3 Data contracts and storage
@@ -56,7 +56,9 @@ A stage is skipped iff an artifact is indexed under $k_\sigma$ (SPEC Invariants 
 
 4.1 `LLM` protocol: `parse(schema, system, prompt, images) -> (instance, Usage)`.
 4.2 `Claude`: `beta.messages.stream` with `output_format=schema`, read by `get_final_message` (the SDK refuses non-streaming requests whose `max_tokens` may exceed 10 min, e.g. the default 32000), ephemeral cache on the system prompt, PNG images first, `output_config.effort`, server-side refusal fallback (`fallbacks="default"`). Any `stop_reason` other than `end_turn`, and output failing the schema (e.g. truncated at `max_tokens`), raise `LLMError`.
-4.3 `Replay`: key $d([\text{model:effort}, \text{JSON schema}, \text{system}, \text{prompt}, [d(\text{image}_i)]])$; hit returns cached instance with zero usage; offline miss raises `LLMError`. Unit tests run offline.
+4.3 `Replay`: key $d([t, \text{JSON schema}, \text{system}, \text{prompt}, [d(\text{image}_i)]])$; hit returns cached instance with zero usage; offline miss raises `LLMError`. Unit tests run offline.
+4.4 Provenance tag $t$ (`llm.tag`): `session`, else `model:effort`; also `Manifest.versions["model"]`.
+4.5 `Session` (`llm = session`): requests answered out of band, e.g. by a Claude Code session. A miss writes `<store>/pending/<key>/request.json` (JSON schema, system, prompt, image files `<i>.png`) and raises `PendingError`; `animath` then prints `{"pending": [dirs]}` and exits 0. A rerun reads `<key>/answer.json`, validates it against the schema (invalid raises `LLMError`) and caches it through `Replay`. Usage is zero.
 
 ## 5 Ingestion
 

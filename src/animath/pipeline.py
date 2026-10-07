@@ -39,7 +39,7 @@ from animath.core.schemas import (
 )
 from animath.core.store import Store
 from animath.eval import metrics
-from animath.llm import LLM, from_settings
+from animath.llm import LLM, from_settings, tag
 from animath.narrate.tts import TTS, Espeak, Kokoro
 from animath.narrate.verbalize import Verbalizer
 from animath.scene import animate, catalog, render
@@ -387,7 +387,7 @@ class Pipeline:
             "plan": plan.VERSION,
             "numerics": numerics.VERSION,
             "narrate": narrate.VERSION,
-            "model": f"{self.settings.model}:{self.settings.effort}",
+            "model": tag(self.settings),
         }
         final = m.model_copy(
             update={

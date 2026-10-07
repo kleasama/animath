@@ -2,6 +2,7 @@ import base64
 import json
 from collections.abc import Iterator
 from contextlib import contextmanager
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -14,7 +15,18 @@ from animath.core.config import Settings
 from animath.core.errors import LLMError
 from animath.core.schemas import Usage
 from animath.core.store import Store
-from animath.llm import FALLBACK_BETA, KEY_VARS, Claude, Replay, api_key, from_settings
+from animath.llm import (
+    FALLBACK_BETA,
+    KEY_VARS,
+    Claude,
+    PendingError,
+    Replay,
+    Session,
+    api_key,
+    from_settings,
+    pending,
+    tag,
+)
 
 
 class Answer(BaseModel):
@@ -167,3 +179,39 @@ def test_from_settings(store: Store, monkeypatch: pytest.MonkeyPatch) -> None:
     assert on.inner.client.api_key == "fallback"
     monkeypatch.setenv("ANIMATH_API_KEY", "primary")
     assert api_key() == "primary"
+
+
+def test_session_requests_then_answers(tmp_path: Path) -> None:
+    llm = Session(tmp_path)
+    with pytest.raises(PendingError, match="Answer request pending"):
+        llm.parse(Answer, "sys", "q", [b"\x89PNG"])
+    (d,) = pending(tmp_path)
+    req = json.loads((d / "request.json").read_text())
+    assert req == {
+        "schema": Answer.model_json_schema(),
+        "system": "sys",
+        "prompt": "q",
+        "images": ["0.png"],
+    }
+    assert (d / "0.png").read_bytes() == b"\x89PNG"
+    (d / "answer.json").write_text('{"value": "seven"}')
+    with pytest.raises(LLMError, match="invalid answer"):
+        llm.parse(Answer, "sys", "q", [b"\x89PNG"])
+    (d / "answer.json").write_text('{"value": 7}')
+    assert pending(tmp_path) == []
+    assert llm.parse(Answer, "sys", "q", [b"\x89PNG"]) == (SEVEN, Usage())
+    with pytest.raises(PendingError):
+        llm.parse(Answer, "sys", "other")
+    assert len(pending(tmp_path)) == 1
+
+
+def test_session_settings(tmp_path: Path, store: Store) -> None:
+    s = Settings(store=tmp_path, llm="session")
+    llm = from_settings(s, store)
+    assert isinstance(llm, Replay)
+    assert isinstance(llm.inner, Session)
+    assert (llm.tag, llm.inner.root) == ("session", tmp_path / "pending")
+    assert tag(Settings(effort="low")) == "claude-opus-5-5:low"
+    offline = from_settings(s.model_copy(update={"offline": True}), store)
+    assert isinstance(offline, Replay)
+    assert (offline.inner, offline.tag) == (None, "session")
