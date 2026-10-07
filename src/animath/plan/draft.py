@@ -33,9 +33,12 @@ Rules:
    the one before but at least 1 s per action, under `brief`: one short line per
    later item, or one line for all. `after` lines then show the result. `{}` in the
    loop's lines, per-item brief lines and action parts stands for the item.
-6. Views: a visual with `view` in its args and no `until` continues into the next
-   scene when a visual there has the same `view`, the same primitive and no `at`. It
-   keeps its args and state without re-entering, and takes new actions and `until`.
+6. Views: a visual with `view` in its args continues the last visual with the same
+   `view` and primitive, in this or an earlier scene. It keeps that visual's args and
+   state, and takes new actions, `until` and `replaces`. If that visual is on screen at
+   the end of the previous scene and this one has no `at`, it carries on without
+   re-entering; else it enters again with its state, e.g. by `replaces` from a zoom
+   that held its region meanwhile.
 7. A visual names a primitive of the catalog; `args` is a JSON object valid against
    its schema; actions come from lines. Prefer catalog primitives; use `code` for
    diagrams none of them draws.

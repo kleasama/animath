@@ -62,7 +62,8 @@ def _act(a: DAction, at: str, item: str | None, **extra: Any) -> tuple[int, dict
 
 
 def script(ds: DScene, wpm: int, errors: list[str]) -> list[Beat]:
-    """Algorithm 7.4: lines, loop passes and holds, with onsets estimated at `wpm`."""
+    """Algorithm 7.4: lines, loop passes and holds, with onsets estimated at `wpm`; a word
+    action also carries its estimated offset in the slot, the fallback without word times."""
     where = f"scene {ds.id}"
     out: list[Beat] = []
 
@@ -105,6 +106,11 @@ def script(ds: DScene, wpm: int, errors: list[str]) -> list[Beat]:
         replay(out, lp.lines, lp.over, briefs, lp.speedup, wpm)
     else:
         onsets(out, wpm)
+    for i, b in enumerate(out):
+        for _, a in b.acts:
+            if "word" in a:
+                at = b.speech * (position(a["word"], b.text) or 0.0) / slot(out, i)
+                a["frac"] = round(min(0.99, at), 4)
     return out
 
 
@@ -193,7 +199,7 @@ class Plan:
         return sum(slot(self.beats, i) for i in range(len(self.beats)))
 
 
-Views = dict[str, tuple[str, dict[str, Any]]]
+Views = dict[str, tuple[str, dict[str, Any], bool]]
 
 
 def plan(
@@ -206,7 +212,7 @@ def plan(
     errors: list[str],
 ) -> Plan:
     """Algorithm 7.2, scene part: script, catalog, data, action, cue, region and node checks;
-    a visual continuing a view of the previous scene takes over its args and state."""
+    a visual naming a view continues its last visual, taking over its args and state."""
     where = f"scene {ds.id}"
     data: list[DataRequest] = []
     for i, d in enumerate(ds.data):
@@ -237,22 +243,25 @@ def plan(
         if (args := _json(v.args, w, errors)) is None:
             continue
         parsed[k] = args
-        old = views.get(str(args.get("view"))) if v.at is None else None
+        old = views.get(str(args["view"])) if "view" in args else None
         if old is not None and old[0] != v.primitive:
             errors.append(f"{w}: view {args['view']!r} continues a {old[0]}, not a {v.primitive}")
             continue
         if old is None:
             _schema(dict(catalog[v.primitive]), args, w, errors)
         else:
-            old[1]["persist"] = True
+            live = old[2] and v.at is None
+            if live:
+                old[1]["persist"] = True
             state = [
                 {x: a[x] for x in ("do", "parts", "color") if x in a}
                 for a in old[1]["actions"]
                 if a["do"] != "indicate"
             ]
-            end = {"until": args["until"]} if "until" in args else {}
-            base = {x: y for x, y in old[1].items() if x not in ("persist", "until")}
-            args = base | {"enter": "none", "actions": state} | end
+            own = {x: args[x] for x in ("until", "replaces") if x in args}
+            drop = ("persist", "until", "replaces", "enter")
+            base = {x: y for x, y in old[1].items() if x not in drop}
+            args = base | ({"enter": "none"} if live else {}) | {"actions": state} | own
         for ref in _refs(args):
             if not isinstance(ref["data"], int) or not 0 <= ref["data"] < len(ds.data):
                 errors.append(f"{w}: array ref {ref} names no data request")
@@ -279,6 +288,8 @@ def plan(
         args["actions"] = [*args.get("actions", []), *(a for _, a, _ in acts.get(k, []))]
         lives.append((str(args.get("region", "main")), t0, t1, w))
         visuals.append((v.primitive, args, v.at))
+        if "view" in args:
+            views[str(args["view"])] = (v.primitive, args, False)
     for i, (r, a0, a1, wa) in enumerate(lives):
         for s, b0, b1, wb in lives[i + 1 :]:
             if (r == s or frozenset({r, s}) in OVERLAPS) and a0 < b1 and b0 < a1:
@@ -336,7 +347,8 @@ def build(
     for ds in d.scenes:
         p = plan(ds, sel, catalog, kernels, wpm, views, errors)
         plans.append(p)
-        views = {a["view"]: (v, a) for v, a, _ in p.visuals if "view" in a and "until" not in a}
+        views = {k: (v, a, False) for k, (v, a, _) in views.items()}
+        views |= {a["view"]: (v, a, "until" not in a) for v, a, _ in p.visuals if "view" in a}
     for p in plans:
         errors += static(p)
     total = sum(p.length for p in plans)

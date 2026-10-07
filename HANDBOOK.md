@@ -189,7 +189,7 @@ with pause $p_\ell$; a line on which a visual enters, and the last line, hold $p
 $$\lvert E - T \rvert \le 0.1\,T, \tag{7.3}$$
 and scene durations follow the estimate,
 $$d_i = T\,E_i / E, \qquad \textstyle\sum_i d_i = T, \tag{7.4}$$
-rounded to 1 ms. The narration speaks at `wpm` with the same gaps and pauses, so (7.3) bounds $Q_6$ up to the token estimate. Line onsets $o_\ell = \sum_{k<\ell} \sigma_k$; a `word` at plain-word position $j$ of $n$ fires at $o_\ell + s_\ell j/n$.
+rounded to 1 ms. The narration speaks at `wpm` with the same gaps and pauses, so (7.3) bounds $Q_6$ up to the token estimate. Line onsets $o_\ell = \sum_{k<\ell} \sigma_k$; a `word` at plain-word position $j$ of $n$ fires at $o_\ell + s_\ell j/n$. Its action carries `frac` $= s_\ell j/(n\,\sigma_\ell)$ (at most 0.99), so without a narration time for the word the renderer fires it at the same fraction of the spoken slot (§9.6).
 
 **Algorithm 7.4 (script).**
 1. Lines of `narration`, then the loop's `lines` with `{}` replaced by the first item (text and parts), then one line per `brief` entry, then `after`. Lines without a bookmark get `#k`, $k$ the line index. Each action becomes `Action{at: bookmark, word, do, parts, color}` of its visual.
@@ -198,7 +198,7 @@ rounded to 1 ms. The narration speaks at `wpm` with the same gaps and pauses, so
 $$D_q = \max\big(D_1 s^{-q},\; n \cdot 1\ \text{s}\big). \tag{7.5}$$
 Brief lines map one to one onto passes (`{}` replaced by the item), or one brief line carries all passes back to back. A brief line's pause grows until its slot $\sigma_b \ge \sum D_q$ of its passes; action $j$ of pass $q$, at offset $O_q$ within that slot, becomes `Action{at: b, frac: (O_q + \tau_j D_q/D_1)/\sigma_b, rate: D_1/D_q}` with `{}` replaced by item $q$.
 
-7.4 Views. A visual whose args name a `view`, without `until`, continues in the next scene when a visual there names the same view, the same primitive, and no `at`. The new visual takes the old args, `enter: none`, and the old actions (without `indicate`) as initial state (`at: null`), then its own actions and `until`; the old visual gets `persist: true`, so it does not exit and the cut is seamless.
+7.4 Views. A visual whose args name a `view` continues the last visual of that view, in its own or an earlier scene; the primitive must match. It takes the old args (without `persist`, `until`, `replaces`, `enter`) and the old actions (without `indicate`) as initial state (`at: null`), then its own actions, `until` and `replaces`. If the old visual is on screen at the end of the previous scene (no `until`) and the new one has no `at`, the new one gets `enter: none` and the old one `persist: true`, so the cut is seamless. Otherwise the view enters again with its state, for example morphing back by `replaces` from a zoom that held its region.
 
 **Algorithm 7.2 (validation).** Errors are collected, not raised:
 
@@ -233,6 +233,8 @@ Brief lines map one to one onto passes (`{}` replaced by the item), or one brief
 | P7 | Actions on lines, expanded into `Args.actions` | the model writes motion where it speaks; renders need no plan knowledge |
 | P8 | Loop passes computed, not written by the model | exact speed-up and readable floor (7.5); one brief line suffices |
 | P9 | Motion check at 7 s on estimates, 8 s on renders (§9.12) | catch static stretches before rendering; the render check has the real timing |
+| P10 | A view continues its last visual even after a gap, re-entering with the replayed state | a view gives way to a zoom and returns unchanged |
+| P11 | Word actions also carry their estimated fraction of the slot | without word times the action still fires near its word, not at the line start |
 
 7.7 Performance: `tests/plan` ≈ 5 s on 4 cores (dominated by importing `scene` for the real catalog).
 ## 8 Numerics

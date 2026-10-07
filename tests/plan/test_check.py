@@ -82,7 +82,8 @@ def test_loop_per_item_brief() -> None:
     assert errs == []
     assert [b.text for b in beats] == ["a b c d", "e 2", "g"]
     assert [b.pause for b in beats] == pytest.approx([1.0, 0.325, 1.0])
-    assert beats[0].acts == [(0, {"at": "#0", "do": "mark", "parts": ["x1"], "word": "c"})]
+    first = {"at": "#0", "do": "mark", "parts": ["x1"], "word": "c", "frac": 0.3738}
+    assert beats[0].acts == [(0, first)]
     assert beats[1].acts == [
         (0, {"at": "#1", "do": "mark", "parts": ["x2"], "frac": 0.3738, "rate": 2.0})
     ]
@@ -273,6 +274,44 @@ def test_view_continues(sel: Selection, cat: Cat, kernels: Cat) -> None:
             {"do": "mark", "parts": ["L"]},
             {"at": "#0", "do": "unmark", "parts": ["L"]},
         ],
+    }
+
+
+def test_view_returns_after_a_zoom(sel: Selection, cat: Cat, kernels: Cat) -> None:
+    d = make_draft()
+    d.scenes[0].narration[2].bookmark = "c"
+    d.scenes[0].narration[0].actions.append(act(2, parts=["L"]))
+    s1 = d.scenes[0].visuals
+    s1[2] = vis("equation", latex="A = LU", region="title", view="op", until="b")
+    s1.append(vis("equation", "b", latex="L", region="title", replaces=2, until="c"))
+    s1.append(vis("equation", "c", region="footer", view="op", replaces=3))
+    d.scenes[1].visuals.append(vis("equation", view="op"))
+    board, errs = build(d, sel, T, cat, kernels)
+    assert errs == []
+    assert board is not None
+    op = {"latex": "A = LU", "region": "title", "view": "op"}
+    state = [{"do": "mark", "parts": ["L"]}]
+    first, back = board.scenes[0].visuals[2].args, board.scenes[0].visuals[4].args
+    assert "persist" not in first
+    assert back == op | {"replaces": 3, "actions": state, "persist": True}
+    assert board.scenes[1].visuals[2].args == op | {"enter": "none", "actions": state}
+
+
+def test_view_reenters_after_a_scene_without_it(sel: Selection, cat: Cat, kernels: Cat) -> None:
+    d = make_draft()
+    d.scenes[0].visuals[2] = vis("equation", latex="A", region="title", view="op")
+    d.scenes.append(
+        DScene(id="s3", goal="g", narration=[line(10)], visuals=[vis("equation", view="op")])
+    )
+    board, errs = build(d, sel, T + 10 * 60 / 135 + 1.0, cat, kernels)
+    assert errs == []
+    assert board is not None
+    assert "persist" not in board.scenes[0].visuals[2].args
+    assert board.scenes[2].visuals[0].args == {
+        "latex": "A",
+        "region": "title",
+        "view": "op",
+        "actions": [],
     }
 
 
