@@ -126,6 +126,57 @@ a hit returns the stored `DocIR` with zero usage. The orchestrator passes `fetch
 
 ## 6 Knowledge extraction
 ## 7 Storyboard
+
+7.1 Interface. `plan.run(graph, params, catalog, store, llm, kernels=None) -> (Storyboard, Usage)` realizes $\Phi_3$. `catalog` maps primitive names to argument JSON schemas (`scene.catalog()`), `kernels` maps data kinds to parameter JSON schemas (`{k: K.model_json_schema() for k, K in numerics.KINDS.items()}`); both are passed by the orchestrator (Rule 6.2). With $\pi_3$ = (`duration_s`, `audience`, `focus`, `language`, `max_retries`),
+$$k_{\text{plan}} = d\big([\texttt{plan}, v, d(\mathcal{K}), d([\pi_3, \text{catalog}, \text{kernels}])]\big). \tag{7.1}$$
+
+| Module | Content |
+|---|---|
+| `select` | seeds, prerequisite closure, budget, topological order (Algorithm 7.1) |
+| `draft` | LLM output schema `Draft`, system prompt, task prompt |
+| `check` | validation and conversion to `Storyboard` (Algorithm 7.2) |
+
+**Algorithm 7.1 (selection, F4).**
+1. Seeds $S$: nodes whose id or a source block equals `focus`, or whose name contains it (case-folded); no match raises `PlanError`. Without focus: key nodes, else the nodes no `depends_on` edge points to.
+2. Breadth-first closure from $S$ along all out-edges; hop $h(v)$; expansion stops at depth $\delta$ = ∞, 2, 1 for undergraduate, graduate, expert.
+3. Budget $N = \max(|S|, \lceil T/15 \rceil)$: keep the $N$ nodes least in $(h, \text{graph order})$; seeds and every kept node's parent survive.
+4. Order by Kahn's algorithm on `depends_on` (prerequisite first), ties by graph order.
+
+7.2 Draft. The model returns `Draft`: scenes with lines, visuals (`args` a JSON string), data requests (`params` a JSON string), node ids, symbols. JSON strings keep the output schema closed for structured outputs. The prompt carries audience, $T$, scene target $\max(1, \operatorname{round}(T/30))$, word target $\operatorname{round}(rT)$, seeds, selected nodes and edges, catalog, kernels.
+
+7.3 Spoken length. With $r = 2.5$ words/s and $w(\ell)$ the number of TeX control words and alphanumeric runs of line $\ell$, scene $i$ has $w_i = \max(1, \sum_{\ell} w(\ell))$, $W = \sum_i w_i$. The draft is admissible only if
+$$\lvert W/r - T \rvert \le 0.1\,T, \tag{7.2}$$
+and scene durations are word-proportional,
+$$d_i = T\,w_i / W, \qquad \textstyle\sum_i d_i = T, \tag{7.3}$$
+rounded to 1 ms. Since run time follows speech (§9.6, §11.2), (7.2) bounds $Q_6$ up to the speech-rate estimate.
+
+**Algorithm 7.2 (validation).** Errors are collected, not raised:
+
+| Check | Rule |
+|---|---|
+| primitive | name in catalog; `args` a JSON object valid against its schema (JSON Schema 2020-12) |
+| arrays | every `{"data", "array"}` object names an existing data request; `part` set outside `matrix` |
+| data | `params` a JSON object; if kernels given, kind known and params valid |
+| cues | `at` names a bookmark (`Scene` validator); `until` names a later bookmark |
+| regions | lifetimes $[\iota(\texttt{at}), \iota(\texttt{until}))$ in line indices, defaults $0$ and $m$; overlapping lifetimes need disjoint regions (`main` meets `left`, `right`) |
+| scene | at least one visual; nodes within the selection; `Scene` validators |
+| board | (7.2); seed coverage $\ge 0.9$ ($Q_5$); unique scene ids |
+
+7.4 Symbol ledger. `Storyboard.symbols` = draft symbols, overridden by selected symbol nodes (`latex` $\mapsto$ `meaning`, else `name`).
+
+**Algorithm 7.3 (plan).** Key hit $\Rightarrow$ return. Else select; for at most $N_{\text{retry}}+1$ attempts: parse `Draft`, validate; on success store and return; else append the previous draft and its errors to the base prompt. Exhaustion raises `PlanError` with the last errors. Usage is summed over attempts.
+
+7.5 Decisions.
+
+| # | Decision | Reason |
+|---|---|---|
+| P1 | Selection deterministic, LLM only for scenes and prose | reproducible F4, smaller prompt |
+| P2 | Durations from words (7.3), not from the model | $\sum d_i = T$ exactly; consistent with narration-driven timing |
+| P3 | `part` required on every non-matrix array ref | real/complex is unknown before $\Phi_4$; `real` on real data is the identity |
+| P4 | Region conflicts checked at plan time | cheap pre-check of §9.5, saves renders and repairs |
+| P5 | `jsonschema` validates against the catalog | catalog is JSON Schema; no import of `scene` |
+
+7.6 Performance: `tests/plan` ≈ 5 s on 4 cores (dominated by importing `scene` for the real catalog).
 ## 8 Numerics
 
 8.1 Interface. `numerics.compute(request, store) -> DataSet` realizes $\Phi_4$. `request.kind` selects a `Kernel` (frozen Pydantic parameters with bounds, `run() -> (arrays, meta)`, pure); invalid kinds or parameters, `LinAlgError`, and non-finite arrays raise `ComputeError`. `numerics.load(ds, store)` returns the arrays.

@@ -29,6 +29,8 @@ idna==3.20
 iniconfig==2.3.1
 isosurfaces==0.1.2
 jiter==0.17.0
+jsonschema==4.26.0
+jsonschema-specifications==2025.9.1
 kiwisolver==1.5.1
 librt==0.16.0 ; platform_python_implementation != 'PyPy'
 manim==0.21.0
@@ -72,9 +74,11 @@ pytest-cov==7.1.0
 python-dateutil==2.9.0.post0
 pyvista==0.49.0
 pyvista-validation==0.2.2
+referencing==0.37.0
 requests==2.34.2
 rich==15.0.0
 rich-rst==2.2.0
+rpds-py==2026.9.1
 ruff==0.16.10
 scipy==1.18.1
 scipy-stubs==1.18.1.1
@@ -88,6 +92,7 @@ srt==3.5.3
 svgelements==1.9.6
 tqdm==4.70.1
 truststore==0.10.4 ; sys_platform != 'emscripten'
+types-jsonschema==4.26.0.20261006
 typing-extensions==4.16.0
 typing-inspection==0.4.4
 urllib3==2.8.0
