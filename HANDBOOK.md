@@ -52,6 +52,8 @@ A stage is skipped iff an artifact is indexed under $k_\sigma$ (SPEC Invariants 
 
 3.5 Validation rules: SPEC Invariants 4.1(3). `depends_on` acyclicity uses Kahn's algorithm, $O(|V|+|E|)$.
 
+3.6 Pacing fields. `Params.wpm` $\in [80, 220]$ (default 135) is the speech rate in words per minute: the planner budgets narration at it (§7.3) and the voice follows it. `Line.pause_s` $\in [0, 30]$ s (default 0) is silence after a narration line; a line with a pause ends its utterance. Both serialize with their defaults, so adding them changed every `SourceBundle` and `Storyboard` digest once.
+
 ## 4 LLM access
 
 4.1 `LLM` protocol: `parse(schema, system, prompt, images) -> (instance, Usage)`.
