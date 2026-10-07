@@ -450,7 +450,7 @@ $f$ the animate function's qualified name, $\pi_5$ = (`width`, `height`, `fps`, 
 | $Q_4$ `q4_layout` | failed `layout`, `critic` checks per scene | automatic |
 | $Q_5$ `q5_coverage` | §6.3 | automatic |
 | $Q_6$ `q6_duration` | $\lvert T_N - T\rvert / T$ | automatic |
-| $Q_7$ `q7_pedagogy` | mean of the 4 rubric scores (1–5) of the judge on storyboard, source equations, 8 keyframes (768 px, $t_j = (j+\frac12)T/8$) | `--judge` |
+| $Q_7$ `q7_pedagogy` | mean of the 4 rubric scores (1–5) of the judge on storyboard, source equations, 8 keyframes (768 px; for $t_j = (j+\frac12)T/8$ the frame in $[t_j - 1, t_j + 1]$ s of least mean change from its predecessor, nearest $t_j$ among ties) | `--judge` |
 | $N_1$ `n1_traced` | fraction of on-screen formulas traced (Algorithm 12.3) | automatic |
 
 `metrics.failures` lists metrics missing their target (`TARGETS`).

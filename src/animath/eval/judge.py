@@ -1,9 +1,12 @@
 """Q7: rubric score of a video by an LLM judge on storyboard, source equations and keyframes."""
 
 import json
-import subprocess
+from io import BytesIO
 from pathlib import Path
 
+import av
+import numpy as np
+from PIL import Image
 from pydantic import BaseModel, Field
 
 from animath.core.errors import AnimathError
@@ -13,6 +16,7 @@ from animath.llm import LLM
 
 FRAMES = 8
 WIDTH = 768
+WINDOW_S = 1.0
 SYSTEM = """You grade a short educational mathematics video against its source.
 Score each criterion from 1 (poor) to 5 (excellent):
 accuracy: every statement and formula agrees with the source;
@@ -35,27 +39,33 @@ class Rubric(BaseModel):
         return (self.accuracy + self.flow + self.relevance + self.layout) / 4
 
 
-def keyframes(video: Path, duration: float, n: int = FRAMES) -> list[bytes]:
-    """PNG frames at t_j = (j + 1/2) T / n, width WIDTH."""
+def keyframes(video: Path, duration: float, n: int = FRAMES, w: float = WINDOW_S) -> list[bytes]:
+    """PNG frames, width WIDTH: for t_j = (j + 1/2) T / n, the frame in [t_j - w, t_j + w] least
+    changed from its predecessor, nearest t_j among ties (a still, not a transition)."""
     out = []
-    for j in range(n):
-        cmd = ["ffmpeg", "-v", "error", "-ss", f"{(j + 0.5) * duration / n:.3f}", "-i", str(video)]
-        cmd += [
-            "-frames:v",
-            "1",
-            "-vf",
-            f"scale={WIDTH}:-2",
-            "-f",
-            "image2pipe",
-            "-c:v",
-            "png",
-            "-",
-        ]
-        try:
-            r = subprocess.run(cmd, capture_output=True, check=True, timeout=60)
-        except (OSError, subprocess.SubprocessError) as e:
-            raise AnimathError(f"keyframe {j} of {video}: {e}") from e
-        out.append(r.stdout)
+    try:
+        with av.open(str(video)) as f:
+            s = f.streams.video[0]
+            for j in range(n):
+                t = (j + 0.5) * duration / n
+                f.seek(int(max(0.0, t - w - 1.0) / s.time_base), stream=s)
+                prev, best, img = None, (np.inf, np.inf), None
+                for fr in f.decode(s):
+                    if fr.time > t + w:
+                        break
+                    cur = fr.reformat(width=96, height=54, format="gray").to_ndarray().astype(float)
+                    if prev is not None and fr.time >= t - w:
+                        key = (float(np.abs(cur - prev).mean()), abs(fr.time - t))
+                        if key < best:
+                            best, img = key, Image.fromarray(fr.to_ndarray(format="rgb24"))
+                    prev = cur
+                if img is None:
+                    raise AnimathError(f"keyframe {j} of {video}: no frame near t={t:.2f} s")
+                buf = BytesIO()
+                img.resize((WIDTH, round(WIDTH * img.height / img.width / 2) * 2)).save(buf, "PNG")
+                out.append(buf.getvalue())
+    except (av.FFmpegError, OSError) as e:
+        raise AnimathError(f"keyframes of {video}: {e}") from e
     return out
 
 

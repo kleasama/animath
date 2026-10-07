@@ -1,6 +1,10 @@
+from io import BytesIO
 from pathlib import Path
 
+import av
+import numpy as np
 import pytest
+from PIL import Image
 
 from animath import eval as ev
 from animath.core.errors import AnimathError
@@ -91,5 +95,23 @@ def test_evaluate_judge_keyframes(tmp_path: Path) -> None:
     frames = judge.keyframes(pipe.store.blob_path(m.video), m.metrics["duration_s"], 3)
     assert len(frames) == 3
     assert all(f.startswith(b"\x89PNG") for f in frames)
-    with pytest.raises(AnimathError, match="keyframe 0"):
+    with pytest.raises(AnimathError, match="keyframes of"):
         judge.keyframes(tmp_path / "none.mp4", 1.0, 1)
+    with pytest.raises(AnimathError, match=r"keyframe 0 .* no frame near t=500\.00"):
+        judge.keyframes(pipe.store.blob_path(m.video), 1000.0, 1, 0.1)
+
+
+def test_judge_keyframes_are_stills(tmp_path: Path) -> None:
+    levels = [5 * k for k in range(25)] + [200] * 10 + [5 * k for k in range(5)]
+    path = tmp_path / "v.mp4"
+    with av.open(str(path), "w") as f:
+        s = f.add_stream("libx264", rate=10, options={"crf": "0"})
+        s.width, s.height, s.pix_fmt = 64, 64, "yuv420p"
+        for v in levels:
+            img = np.full((64, 64, 3), v, dtype=np.uint8)
+            f.mux(s.encode(av.VideoFrame.from_ndarray(img, format="rgb24")))
+        f.mux(s.encode())
+    (png,) = judge.keyframes(path, 4.0, 1)
+    key = Image.open(BytesIO(png))
+    assert key.size == (judge.WIDTH, judge.WIDTH)
+    assert abs(float(np.asarray(key.convert("L")).mean()) - 200) < 3

@@ -69,6 +69,5 @@ Legend: ✓ done · ✱ in progress · ○ open · ⏸ checkpoint (review, commi
 | # | Bug | Owner |
 |---|---|---|
 | B1 | N1 < 1: planner shows worked values and steps absent from the source | Animation flow and pacing (source values via numerics requests) |
-| B2 | Judge keyframes at $(j+\tfrac12)T/8$ may land mid-transition | integrator |
-| B3 | Gauss narration 15% over budget (Q6) | Natural narration voice |
-| B4 | Repair memo key omits the model tag | integrator |
+| B2 | Gauss narration 15% over budget (Q6) | Natural narration voice |
+| B3 | Repair memo key omits the model tag | integrator |
