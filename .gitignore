@@ -1,0 +1,8 @@
+.venv/
+__pycache__/
+.coverage
+.*_cache/
+*.egg-info/
+dist/
+.animath/
+uv.lock
