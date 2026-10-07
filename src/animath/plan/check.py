@@ -8,6 +8,7 @@ from typing import Any
 from jsonschema import Draft202012Validator
 from pydantic import JsonValue, ValidationError
 
+from animath.core.formula import parts, untraced
 from animath.core.schemas import DataRequest, Line, NodeKind, Scene, Storyboard, Visual
 from animath.plan.draft import DAction, DLine, Draft, DScene, Schemas
 from animath.plan.select import Selection
@@ -424,6 +425,13 @@ def build(
             )
         except ValidationError as e:
             errors.extend(f"scene {p.ds.id}: {x['msg']}" for x in e.errors())
+    refs = [x for n in sel.nodes if n.latex for x in (n.latex, *parts(n.latex))]
+    errors += [
+        f"scene {s.id}: ${f}$ is not a node formula, a list of them, or a derive step "
+        "equivalent to the one before"
+        for s in scenes
+        for f in untraced(s, refs)
+    ]
     if errors:
         return None, errors
     try:

@@ -51,8 +51,10 @@ Rules:
    p in {abs, real, imag}; `part` is required outside `matrix`.
 10. A data request has a kind of the kernel catalog and `params` as a JSON object
    valid against its schema.
-11. On-screen formulas are those of the nodes or exact consequences; use the source
-   notation.
+11. On-screen formulas (`math`, `equation`, `derive` steps) are formulas of the nodes in
+   their notation, items of them, or lists of these; a `derive` step may instead be
+   equivalent to the step before it. Values worked out for an example come from data
+   requests, shown by data visuals such as `matrix`, never typed into a formula.
 12. Cover every seed node. List symbols as LaTeX with their meaning.
 When errors of a previous draft are given, return a corrected full draft."""
 
