@@ -192,7 +192,7 @@ Groups run sequentially $A\to B\to C\to D\to E$; WPs within a group run in paral
 1. Code lives in the private GitHub repository `kleasama/animath`; `main` is protected by convention: only the integrator merges.
 2. A WP thread branches `wp<N>-<name>` from `main`, keeps `make check` green, and opens a pull request; CI runs `make check`.
 3. A WP may add its runtime dependencies to `pyproject.toml` and re-run `make lock`; conflicts in these two files are resolved by the integrator with `make lock`.
-4. At each checkpoint the integrator merges the group, records the commit in `PROGRESS.md`, and uploads `SPEC.md`, `PROGRESS.md`, `HANDBOOK.md`, and a git bundle snapshot to the Drive folder.
+4. At each checkpoint the integrator merges the group, records the commit in `PROGRESS.md`, and uploads `SPEC.md`, `PROGRESS.md`, `HANDBOOK.md` to the Drive folder; GitHub is the only code store (the C1 `animath.bundle` in Drive is a one-off snapshot, size-checked only).
 
 ## 8 Decisions (C0)
 

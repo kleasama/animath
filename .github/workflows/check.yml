@@ -11,5 +11,13 @@ jobs:
       - uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.13"
+      - name: System packages (mirror docker/Dockerfile)
+        run: >
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends
+          ffmpeg pandoc libcairo2-dev libpango1.0-dev pkg-config dvisvgm espeak-ng libosmesa6
+          texlive-latex-base texlive-latex-extra texlive-fonts-recommended texlive-science
+          texlive-extra-utils
+      - name: Speech Rule Engine
+        run: npm install -g speech-rule-engine@4.1.4 mathjax-full@3.2.1 && echo "NODE_PATH=$(npm root -g)" >> "$GITHUB_ENV"
       - run: make setup
       - run: make check
