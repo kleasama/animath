@@ -310,6 +310,39 @@ Every cue starts on its own frame, so $Q_3 \le 1/(2f)$, and the clip has exactly
 2. PyVista renders through OSMesa (`VTK_DEFAULT_OPENGL_WINDOW=vtkOSOpenGLRenderWindow`, set if absent); requires `libosmesa6`.
 3. Build failures (e.g. LaTeX errors) are re-raised as `AnimateError` naming `scene.visual:primitive`, for the WP8 repair loop.
 4. Tests run Manim under `tempconfig` with a temporary `media_dir`; nothing is written to the working tree.
+
+9.9 Scene generation (WP8). `scene.animate.animate(scene, data, narration, store, llm, params) -> SceneRender` realizes $\Phi_5$; `data` maps request digests to `DataSet`. With $\pi_5$ = (`width`, `height`, `fps`, `max_retries`) and $D_s = [d(\text{DataSet of } r) \text{ or null} : r \in \texttt{scene.data}]$,
+$$k_{\text{animate}} = d\big([\texttt{animate}, v, d(s), d([D_s, d(\text{Narration}) \text{ or null}, \pi_5])]\big). \tag{9.5}$$
+
+| Module | Content |
+|---|---|
+| `codegen` | static gate, `code` primitive, pinned API |
+| `repair` | localized LLM patch, pitfall memory |
+| `critic` | keyframes, cell content check, VLM verdict |
+| `animate` | Algorithm 9.3, stage key |
+
+**Algorithm 9.3 (animate).** Key hit $\Rightarrow$ return. Else, with `code` registered:
+1. $E$ ← visuals whose primitive is not in `PRIMITIVES` (codegen requests).
+2. For at most $N_{\text{retry}}+1$ rounds: if $E \ne \emptyset$, patch $s$ by `repair` (an invalid patch appends its error to $E$ and ends the round); $E$ ← first non-empty of: static gate of every `code` visual; draft render (`AnimateError`); critic. If $E = \emptyset$: final render, store under (9.5), return. Else record $E$ in pitfall memory.
+3. Exhaustion raises `AnimateError` with the last $E$.
+
+Hence at most $N_{\text{retry}}$ repairs follow the first check; codegen is the repair of round 1.
+
+9.10 `code` primitive. Arguments `code`, `region`, `until`. The snippet is exactly `def build(array)` returning one `Mobject`; `array(i, name, part=None)` is `Context.real` on `ArrayRef(i, name, part)`. It enters by `Write`/`FadeIn` and is fitted by (9.2) like any primitive. The gate admits names from a whitelist (32 mobject classes, direction and colour constants, 14 builtins), `np.f` for 29 NumPy functions only, and rejects imports, `while`, `try`, `with`, `raise`, `global`, class definitions, and attributes with prefixes `_`, `f_`, `gi_`, `co_`, `cr_`, `ag_`, `tb_` or names `format`, `save`, `tofile`, `dump`. Execution uses a namespace of exactly these symbols. Runtime errors report the snippet line. The gate filters model errors; it is not a security boundary.
+
+9.11 Localization. Every error names visual $i$ of scene $s$ as `s.i:primitive` (render, gate and critic alike). `repair` may replace only the visuals named in $E$ (block level; snippet line numbers give line level), else all visuals (scene level). The model returns `Patch` = [(index, primitive, args as JSON string, at)]; a patch outside the allowed indices, with non-object `args`, or yielding an invalid `Scene` is rejected. The prompt carries goal, narration, math, data requests, indexed visuals, $E$, allowed indices and pitfalls; the system prompt carries the catalog (with `code`), region sizes and the pinned API (constructor parameters, at most 8 per class), so it is cached.
+
+9.12 Critic. Keyframes: for consecutive change frames $a < b$ of the visual set, frame
+$$n = \max\big(a,\; b - 1 - \operatorname{round}(0.5 f)\big), \tag{9.6}$$
+i.e. after entries and before exits, kept if a visual is alive; at most 6, evenly subsampled. A visual alive at $n$ with $n \ge \operatorname{round}((t_0 + 1)f)$ fails if its grid cell has no pixel above 16 (of 255). Only if no visual fails, the model receives the keyframes as PNG with the plan and returns `Verdict` (issues with optional visual index).
+
+9.13 Pitfall memory. Index namespace `pitfall`, key $H(\text{primitive})$ (`scene` for unlocalized errors), value a blob with the last 8 distinct messages (300 characters each). Read-modify-write is last-writer-wins across processes; a lost entry only weakens a hint.
+
+9.14 Notes.
+1. `animate` registers `code` in `PRIMITIVES` for its duration; with the renderer this makes it thread-unsafe: parallelize scenes over processes (WP9). `scene.catalog()` stays free of `code`, so the planner never emits it.
+2. LaTeX precompile is the build phase of the draft render: `compose` builds every mobject before any frame, and build errors are localized.
+3. `animate` returns no `Usage` (frozen interface); LLM usage of $\Phi_5$ is not in the manifest.
+4. Unit tests use a queued fake LLM (`tests/scene/fake.py`); no network.
 ## 10 Narration
 
 10.1 $\Phi_6$ maps each scene $s$ with lines $\ell_1,\dots,\ell_m$ to a `Narration`. Entry: `narrate.narrate(board, store, tts, verbalizer, workers) -> {scene id: digest}`.
@@ -386,6 +419,7 @@ Segment $i$ is exactly $n_i$ frames and $S_i$ samples; $\sum_i S_i = \operatorna
 | `make check` wall time (WP3) | ≈ 30 s on 4 cores |
 | Draft render, 12 s scene, 8 primitives (`surface` included) | ≈ 10.5 s on 4 cores |
 | `tests/extract` | ≈ 2 s on 4 cores |
+| `tests/scene` WP8 part | ≈ 10 s on 4 cores |
 
 ## 14 Decisions log
 
