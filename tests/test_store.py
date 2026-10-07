@@ -1,3 +1,4 @@
+import multiprocessing
 import os
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from pathlib import Path
@@ -70,7 +71,7 @@ def _write(args: tuple[str, int]) -> str:
 
 
 def test_concurrent_processes(store: Store) -> None:
-    with ProcessPoolExecutor(4) as ex:
+    with ProcessPoolExecutor(4, mp_context=multiprocessing.get_context("forkserver")) as ex:
         ds = list(ex.map(_write, [(str(store.root), i) for i in range(24)]))
     assert len(set(ds)) == 3
     assert {store.get_blob(d)[:1] for d in ds} == {b"0", b"1", b"2"}
