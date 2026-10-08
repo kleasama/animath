@@ -8,7 +8,8 @@ from animath.core.errors import AnimateError
 from animath.scene.layout import Box
 from animath.scene.primitives.base import ENTER_S, Args, Context, Cue, Primitive, enter, path
 
-CONTROL = re.compile(r"\\[A-Za-z]+")
+CONTROL = re.compile(r"\\(?:[A-Za-z]+|.)")
+BLANK = re.compile(r"\n\s*\n")
 ARG = re.compile(
     r"(\^|_|\\(?:hat|bar|vec|tilde|dot|ddot|check|breve|widehat|widetilde|overline|underline"
     r"|mathbf|mathrm|mathcal|mathbb|mathsf|mathit|boldsymbol)(?![A-Za-z]))\s*"
@@ -24,7 +25,7 @@ def braced(tex: str) -> str:
 
 
 def whole(tex: str, a: int, b: int) -> bool:
-    """[a, b) cuts no control word of `tex`."""
+    """[a, b) cuts no control word or control symbol (`\\\\`, `\\,`) of `tex`."""
     return not any(x < a < y or x < b < y for x, y in (m.span() for m in CONTROL.finditer(tex)))
 
 
@@ -95,7 +96,7 @@ class Equation(Primitive[EquationArgs]):
     args = EquationArgs
 
     def build(self, a: EquationArgs, ctx: Context, cell: Box) -> Mobject:
-        return IsoMathTex(braced(a.latex), substrings_to_isolate=selectors(a))
+        return IsoMathTex(braced(BLANK.sub("\n", a.latex)), substrings_to_isolate=selectors(a))
 
     def part(self, m: Mobject, a: EquationArgs, sel: str) -> Mobject:
         return tex_part(m, sel)
@@ -115,7 +116,7 @@ class Derive(Primitive[DeriveArgs]):
         return [t0 + k * (t1 - t0) / n for k in range(n)]
 
     def build(self, a: DeriveArgs, ctx: Context, cell: Box) -> Mobject:
-        m = VGroup(*(MathTex(s).move_to(ORIGIN) for s in a.steps))
+        m = VGroup(*(MathTex(BLANK.sub("\n", s)).move_to(ORIGIN) for s in a.steps))
         setattr(m, SHOWN, 0)
         return m
 

@@ -359,7 +359,7 @@ Numerical arguments are literals or `ArrayRef` $(i, a)$: array $a$ of the `DataS
 | `hierarchy` | `data`, `level`, `done`, `coloured`, `views` ⊆ {`plate`, `operator`}, `steps` (`do`, `part`) | cluster boxes, block operator in tree order (§9.15); step $i$ at $t_e + (i+1)(t_x-t_e)/(n+1)$ | `t`, `s`, `cluster:k`, `colour:c`, `block:a:b` | the 15 board verbs of §9.15 |
 | `code` | `code` (§9.10) | generated | index paths | the snippet's `act` |
 
-Every primitive also accepts dotted index paths (`1.0`) as parts. A TeX part isolates every occurrence of the substring that cuts no control word (`t` is not isolated inside `\to`). Undelimited arguments of `^`, `_` and accent or font macros are braced first (`x^2` to `x^{2}`, `\hat x` to `\hat{x}`), since an isolation marker before such an argument breaks the TeX; cuts inside braces are safe.
+Every primitive also accepts dotted index paths (`1.0`) as parts. A TeX part isolates every occurrence of the substring that cuts no control word or control symbol (`t` is not isolated inside `\to`, `T` is after the row break `\\`). Undelimited arguments of `^`, `_` and accent or font macros are braced first (`x^2` to `x^{2}`, `\hat x` to `\hat{x}`), since an isolation marker before such an argument breaks the TeX; cuts inside braces are safe. Blank lines in `equation` latex and `derive` steps are collapsed, since a paragraph break inside display math is a TeX error.
 
 9.3 Semantic grid. For frame $F = [-W/2, W/2] \times [-H/2, H/2]$, $H = 8$, $W = 8w/h$, a region with normalized box $(u_0, v_0, u_1, v_1)$ occupies
 $$C = [-W/2 + u_0 W,\; -W/2 + u_1 W] \times [-H/2 + v_0 H,\; -H/2 + v_1 H]. \tag{9.1}$$

@@ -129,6 +129,8 @@ def test_default_hooks(store: Store) -> None:
 def test_tex_parts(store: Store) -> None:
     assert whole(r"t \to s", 0, 1)
     assert not whole(r"\to", 2, 3)
+    assert whole(r"a\\T", 3, 4)
+    assert not whole(r"a\,b", 2, 4)
     m = IsoMathTex(r"t \to t_{s}", substrings_to_isolate=["t"])
     assert len(tex_part(m, "t")) == 2
     assert tex_part(m, "0") is m[0]
@@ -148,6 +150,22 @@ def test_tex_parts(store: Store) -> None:
         {"text": "a cluster $t$", "actions": [{"do": "dim", "parts": ["cluster"]}]}
     )
     assert len(t.part(t.build(ta, context(store), MAIN), ta, "cluster")) == 1
+
+
+def test_display_math_rows_and_blank_lines(store: Store) -> None:
+    p, d, sel = PRIMITIVES["equation"], PRIMITIVES["derive"], r"T_U^{\mathsf{T}}"
+    a = p.args.model_validate(
+        {
+            "latex": rf"\begin{{bmatrix}}I_{{k}}\\{sel}\end{{bmatrix}}",
+            "actions": [{"at": "a", "do": "mark", "parts": [sel]}],
+        }
+    )
+    m = p.build(a, context(store), MAIN)
+    assert len(p.part(m, a, sel).family_members_with_points()) == 3
+    a = p.args.model_validate({"latex": "a &= b\n\n  &+ c"})
+    assert p.build(a, context(store), MAIN).get_tex_string() == "a &= b\n  &+ c"
+    s = d.build(d.args.model_validate({"steps": ["a\n \n= b", "b"]}), context(store), MAIN)
+    assert s[0].get_tex_string() == "a\n= b"
 
 
 def test_array_resolution(store: Store) -> None:
