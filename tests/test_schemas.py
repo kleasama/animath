@@ -41,7 +41,8 @@ def test_params_bounds() -> None:
     p = Params()
     assert (p.width, p.height, p.fps, p.duration_s, p.wpm) == (1920, 1080, 60, 180.0, 135)
     assert (Params(wpm=80).wpm, Params(wpm=220).wpm) == (80, 220)
-    bounds = ({"wpm": 79}, {"wpm": 221})
+    assert Params(duration_s=1800).duration_s == 1800
+    bounds = ({"wpm": 79}, {"wpm": 221}, {"duration_s": 1801})
     for bad in ({"width": 1921}, {"duration_s": 0}, {"fps": 240}, {"budget_usd": 0}, *bounds):
         with pytest.raises(ValidationError):
             Params.model_validate(bad)

@@ -44,7 +44,7 @@ class Audience(StrEnum):
 
 
 class Params(Model):
-    duration_s: float = Field(180.0, gt=0, le=1200)
+    duration_s: float = Field(180.0, gt=0, le=1800)
     wpm: int = Field(135, ge=80, le=220, description="speech rate in words per minute, 80 to 220")
     audience: Audience = Audience.GRADUATE
     focus: str | None = None
