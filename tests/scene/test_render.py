@@ -21,6 +21,7 @@ from manim import (
     Square,
     VGroup,
 )
+from manim.mobject.text.tex_mobject import MathTexPart
 
 from animath.core.errors import AnimateError
 from animath.core.schemas import Line as Spoken
@@ -337,12 +338,34 @@ def test_primitive_verbs_play(store: Store) -> None:
     assert max(int(i.max()) for i in imgs[-1:]) < 64
 
 
-def test_failed_cue_names_its_action() -> None:
+def test_a_shown_term_morphs_with_its_equation(store: Store) -> None:
+    def clip(*acts: dict[str, Any]) -> tuple[list[np.ndarray], list[Cue]]:
+        s = scn(eq(until="b", actions=list(acts)), eq("x + z", "b", replaces=0))
+        out, cues = shoot(s, Params(), store, draft=True)
+        return frames_of(str(store.blob_path(out.clip))), cues
+
+    imgs, cues = clip({"at": "a", "do": "show", "parts": ["y"]})
+    ref, _ = clip()
+    m = cues[0].mobject
+    assert m is not None
+    assert {type(x) for x in m.submobjects} == {MathTexPart}
+    assert np.abs(imgs[20] - ref[20]).max() > 128
+    assert max(int(np.abs(a - b).max()) for a, b in zip(imgs[36:], ref[36:], strict=True)) <= 8
+
+
+@pytest.mark.parametrize(
+    ("what", "match"),
+    [
+        ("s.0:x: dim at 0.10 s", r"^s\.0:x: dim at 0\.10 s failed: ValueError: bad part$"),
+        ("", r"^cue at 0\.10 s failed: ValueError: bad part$"),
+    ],
+)
+def test_failed_cue_names_its_action(what: str, match: str) -> None:
     def boom() -> Animation:
         raise ValueError("bad part")
 
-    with pytest.raises(AnimateError, match=r"s\.0:x: dim at 0\.10 s failed: bad part"):
-        play([Cue(0.1, 0.2, boom, Square(), "s.0:x: dim at 0.10 s")], 0.5)
+    with pytest.raises(AnimateError, match=match):
+        play([Cue(0.1, 0.2, boom, Square(), what)], 0.5)
 
 
 def test_render_clip(store: Store) -> None:
