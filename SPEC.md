@@ -10,7 +10,7 @@ composed of stages $\Phi_1,\dots,\Phi_7$ over the DAG of §6.1, where $\mathcal{
 
 **Input.** $\mathcal{S} \in \{\text{MD}, \text{LaTeX (single or multi-file)}, \text{PDF}\}$; content type $\in$ {formulation, textbook chapter, paper, algorithm}.
 
-**Parameters $\pi$** (`core.schemas.Params`). target duration $T$ (default 180 s, $T_{\max}=1200$ s), audience level $\in$ {undergraduate, graduate, expert}, focus (section/equation/algorithm selector), language (default en), voice, resolution (default 1920×1080, 60 fps), style preset, seed, retry bound $N_{\text{retry}}$, budget cap, approval gates (default on).
+**Parameters $\pi$** (`core.schemas.Params`). target duration $T$ (default 180 s, $T_{\max}=1800$ s), audience level $\in$ {undergraduate, graduate, expert}, focus (section/equation/algorithm selector), language (default en), voice, resolution (default 1920×1080, 60 fps), style preset, seed, retry bound $N_{\text{retry}}$, budget cap, approval gates (default on).
 
 **Output.** $\mathcal{V}$ = {`video.mp4` (H.264, AAC, faststart), `subs.vtt`, `manifest.json` (provenance, hashes, timings, usage, metrics)}.
 
