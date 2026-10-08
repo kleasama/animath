@@ -438,6 +438,9 @@ def test_formulas_trace_to_the_nodes(sel: Selection, cat: Cat, kernels: Cat) -> 
     d.scenes[1].visuals.append(vis("derive", steps=["x", "x + 0", "2x"], region="footer"))
     tail = "is not a node formula, a list of them, or a derive step equivalent to the one before"
     assert errors(d, sel, cat, kernels) == [f"scene s2: $w$ {tail}", f"scene s2: $2x$ {tail}"]
+    w = Node(id="w", kind=NodeKind.EQUATION, name="w", latex="w", sources=("b3",))
+    wide = Selection(sel.nodes, sel.seeds, (w,))
+    assert errors(d, wide, cat, kernels) == [f"scene s2: $2x$ {tail}"]
 
 
 def test_scene_errors(sel: Selection, cat: Cat, kernels: Cat) -> None:

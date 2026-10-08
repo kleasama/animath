@@ -5,11 +5,11 @@ import pytest
 from pydantic import JsonValue
 
 from animath.core.errors import LLMError, PlanError
-from animath.core.schemas import KnowledgeGraph, Params, Storyboard, Usage
+from animath.core.schemas import KnowledgeGraph, Node, NodeKind, Params, Storyboard, Usage
 from animath.core.store import Store
 from animath.llm import Replay
-from animath.plan import run
-from animath.plan.draft import Draft
+from animath.plan import run, select
+from animath.plan.draft import Draft, prompt
 from tests.plan.conftest import Fake, T, line, make_draft
 
 Cat = dict[str, dict[str, JsonValue]]
@@ -33,6 +33,7 @@ def test_run_caches(
     assert task["wpm"] == 135
     assert [n["id"] for n in task["nodes"]] == ["efie", "mom"]
     assert task["edges"] == [{"src": "mom", "dst": "efie", "rel": "depends_on"}]
+    assert task["formulas"] == {}
     again = run(graph, Params(duration_s=T, fps=30, voice="x"), cat, store, Fake(), kernels)
     assert again == (board, Usage())
 
@@ -82,3 +83,11 @@ def test_replay_offline(graph: KnowledgeGraph, store: Store, draft: Draft, cat: 
     assert run(graph, p, cat, fresh, fresh_llm) == (board, Usage())
     with pytest.raises(LLMError, match="offline"):
         run(graph, Params(duration_s=T, audience="expert"), cat, fresh, fresh_llm)
+
+
+def test_prompt_offers_the_other_formulas(graph: KnowledgeGraph, cat: Cat, kernels: Cat) -> None:
+    w = Node(id="w", kind=NodeKind.EQUATION, name="W", latex="w = 1", sources=("b3",))
+    g = KnowledgeGraph(nodes=(*graph.nodes, w), edges=graph.edges)
+    p = Params(duration_s=T)
+    task = json.loads(prompt(g, select(g, p), p, cat, kernels))
+    assert ([n["id"] for n in task["nodes"]], task["formulas"]) == (["efie", "mom"], {"w": "w = 1"})

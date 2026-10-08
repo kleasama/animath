@@ -16,8 +16,12 @@ DEPTH: dict[Audience, int | None] = {
 
 @dataclass(frozen=True)
 class Selection:
+    """Nodes to teach, in order; their seeds; the other nodes with formulas, which scenes may
+    show."""
+
     nodes: tuple[Node, ...]
     seeds: frozenset[str]
+    context: tuple[Node, ...] = ()
 
     @property
     def ids(self) -> frozenset[str]:
@@ -41,7 +45,8 @@ def seeds(g: KnowledgeGraph, focus: str | None) -> list[str]:
 
 
 def select(g: KnowledgeGraph, p: Params) -> Selection:
-    """Algorithm 7.1: hop-limited, budgeted prerequisite closure of the seeds, ordered."""
+    """Algorithm 7.1: hop-limited, budgeted prerequisite closure of the seeds, ordered, and the
+    other nodes with latex as context."""
     s = seeds(g, p.focus)
     out: dict[str, list[str]] = {n.id: [] for n in g.nodes}
     for e in g.edges:
@@ -60,7 +65,8 @@ def select(g: KnowledgeGraph, p: Params) -> Selection:
     pos = {n.id: i for i, n in enumerate(g.nodes)}
     budget = max(len(s), math.ceil(p.duration_s / SECONDS_PER_NODE))
     keep = set(sorted(hops, key=lambda i: (hops[i], pos[i]))[:budget])
-    return Selection(tuple(g.nodes[pos[i]] for i in order(g, keep, pos)), frozenset(s))
+    nodes = tuple(g.nodes[pos[i]] for i in order(g, keep, pos))
+    return Selection(nodes, frozenset(s), tuple(n for n in g.nodes if n.latex and n.id not in keep))
 
 
 def order(g: KnowledgeGraph, keep: set[str], pos: dict[str, int]) -> list[str]:

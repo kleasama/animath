@@ -425,7 +425,7 @@ def build(
             )
         except ValidationError as e:
             errors.extend(f"scene {p.ds.id}: {x['msg']}" for x in e.errors())
-    refs = [x for n in sel.nodes if n.latex for x in (n.latex, *parts(n.latex))]
+    refs = [x for n in (*sel.nodes, *sel.context) if n.latex for x in (n.latex, *parts(n.latex))]
     errors += [
         f"scene {s.id}: ${f}$ is not a node formula, a list of them, or a derive step "
         "equivalent to the one before"
