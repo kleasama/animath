@@ -59,6 +59,7 @@ Legend: ✓ done · ✱ in progress · ○ open · ⏸ checkpoint (review, commi
 | v0.2 | PRs #15–#17: Kokoro sentence narration with model word timings, gain and limiter loudness; `h2.rss` RS-S kernel, `hierarchy` primitive, `data.npz` arrays pinned by SHA-256; written-maths captions. 517 tests, 100% line+branch coverage. |
 | v0.3 | PRs #18, #19: 135 wpm pacing with `Line.pause_s` holds honoured by narration and voice speed from `Params.wpm`; word-timed actions on named parts; repeat loops with speed-up; resumable views; `code` primitive in the planner; byte-identical clips (x264 `mbtree=0`). 588 tests, 100% line+branch coverage. |
 | v0.4 | PRs #20–#22: word-timed hierarchy verbs and live parts; one Kokoro speed per video so words land on `Params.wpm`; planner length $E_i = L + \sum_\ell \sigma_\ell$ from spoken (verbalized) words with $L = 0.4$ s per scene, matching narration within 0.4% (B2 closed); CI step and job timeouts. 598 tests, 100% line+branch coverage. |
+| v0.5 | PR #23: Algorithm 12.3 in `core/formula.py`; the planner rejects on-screen formulas not traced to the selected nodes and sends worked values to data requests (B1 closed); N1 accepts lists of traced formulas. 615 tests, 100% line+branch coverage. |
 | C4 | PRs #9, #10 merged. `scene.animate` returns `(SceneRender, Usage)` and is the pipeline default; `pipeline.render_only` is the no-LLM path. 362 tests, 100% line+branch coverage. |
 
 ## Open questions
@@ -71,5 +72,4 @@ Legend: ✓ done · ✱ in progress · ○ open · ⏸ checkpoint (review, commi
 
 | # | Bug | Owner |
 |---|---|---|
-| B1 | N1 < 1: planner shows worked values and steps absent from the source | Animation flow and pacing (source values via numerics requests) |
 | B3 | Repair memo key omits the model tag | integrator |
