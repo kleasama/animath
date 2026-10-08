@@ -14,9 +14,19 @@ from tests.plan.conftest import T, line, make_draft, vis
 Cat = dict[str, dict[str, JsonValue]]
 
 
+FORMULAS = Node(
+    id="lu",
+    kind=NodeKind.EQUATION,
+    name="LU",
+    latex="A = LU, L, A, B, x, y, z, a, b, c",
+    sources=("b2",),
+)
+
+
 @pytest.fixture
 def sel(graph: KnowledgeGraph) -> Selection:
-    return select(graph, Params(duration_s=T))
+    s = select(graph, Params(duration_s=T))
+    return Selection((*s.nodes, FORMULAS), s.seeds)
 
 
 def errors(d: Draft, sel: Selection, cat: Cat, kernels: Cat) -> list[str]:
@@ -421,6 +431,13 @@ def test_sequential_visuals_share_region(sel: Selection, cat: Cat, kernels: Cat)
     d.scenes[0].visuals.append(vis("equation", "a", latex="y", region="footer", until="b"))
     d.scenes[0].visuals.append(vis("equation", "b", latex="z", region="footer"))
     assert errors(d, sel, cat, kernels) == []
+
+
+def test_formulas_trace_to_the_nodes(sel: Selection, cat: Cat, kernels: Cat) -> None:
+    d = edit(1, math=[r"\begin{gathered} A = LU \\ x \end{gathered}", "LU = A", "w"])
+    d.scenes[1].visuals.append(vis("derive", steps=["x", "x + 0", "2x"], region="footer"))
+    tail = "is not a node formula, a list of them, or a derive step equivalent to the one before"
+    assert errors(d, sel, cat, kernels) == [f"scene s2: $w$ {tail}", f"scene s2: $2x$ {tail}"]
 
 
 def test_scene_errors(sel: Selection, cat: Cat, kernels: Cat) -> None:

@@ -113,7 +113,7 @@ animath/
   SPEC.md PROGRESS.md HANDBOOK.md README.md Makefile pyproject.toml requirements.lock
   docker/Dockerfile       TeX Live, dvisvgm, ffmpeg, pandoc, cairo/pango, espeak-ng, node
   src/animath/
-    core/                 errors, hashing, schemas, store, config          (WP0)
+    core/                 errors, hashing, schemas, store, config, formula (WP0)
     llm/                  LLM protocol, Claude adapter, replay cache       (WP0)
     ingest/               md, latex, pdf, macro expansion, equation check  (WP1)
     numerics/             quadrature, Krylov traces, kernels, data cache   (WP2)

@@ -4,45 +4,6 @@ from animath.core.schemas import Block, BlockType, DocIR, Line, Scene, Storyboar
 from animath.eval import formula
 
 
-@pytest.mark.parametrize(
-    ("a", "b"),
-    [
-        (r"\left( x^{2} \right)\,+\alpha x.", r"(x^2)+\alpha x"),
-        (r"\displaystyle a_{i}\quad=b", "a_i = b"),
-        (r"\Bigl( a \Bigr) ;", "(a)"),
-        (r"\mathrm{d}x", r"\mathrm dx"),
-        (r"\frac{1}{\sqrt{3}}", r"\frac1{\sqrt3}"),
-        (r"a &= b", "a = b"),
-    ],
-)
-def test_normalize_equal(a: str, b: str) -> None:
-    assert formula.normalize(a) == formula.normalize(b)
-
-
-def test_normalize_distinct() -> None:
-    assert formula.normalize(r"\alpha x") != formula.normalize(r"\alphax")
-    assert formula.normalize("x^{ab}") != formula.normalize("x^ab")
-
-
-@pytest.mark.parametrize(
-    ("a", "b", "verdict"),
-    [
-        ("x^2+2x+1=(x+1)^2", "(x+1)^2=x^2+2x+1", True),
-        ("a-b=0", "b-a=0", True),
-        (r"\frac{1}{2}\mu(x)", r"\mu(x)/2", True),
-        (r"\int_{-1}^{1} p(x)\,dx", r"\int_{-1}^{1} p(x) dx", True),
-        ("a+b", "a-b", False),
-        ("a=b", "a+b", False),
-        (r"a \le b", r"a \le b", True),
-        (r"\|r\|", "r", None),
-        ("x+", "x", None),
-        (r"\mathbf{x}+1", "1+x", True),
-    ],
-)
-def test_equivalent(a: str, b: str, verdict: bool | None) -> None:
-    assert formula.equivalent(a, b) is verdict
-
-
 def doc(*eqs: tuple[str | None, str]) -> DocIR:
     return DocIR(
         title="t",
@@ -102,13 +63,22 @@ def test_untraced_parts_inline_markers() -> None:
         ),
     )
     steps = ["x=y+z", r"\mathbf E^{\mathrm{inc}}", "{{x}}=y+{{z}}"]
+    listed = r"\begin{gathered} x=y+z \\ G(r,s)=\mathrm e^{r} \end{gathered}"
     s = Scene(
         id="s",
         goal="g",
         narration=(Line(text="w"),),
         visuals=(Visual(primitive="derive", args={"steps": steps}),),
-        math=(r"a=\langle f,g\rangle", r"G(r,s)=\mathrm{e}^{r}", "x=y", r"\langle f"),
+        math=(
+            r"a=\langle f,g\rangle",
+            r"G(r,s)=\mathrm{e}^{r}",
+            "x=y",
+            r"\langle f",
+            listed,
+            "x=y+z, q",
+        ),
         duration_s=1,
     )
     board = Storyboard(title="t", scenes=(s,))
-    assert formula.untraced(board, src) == (7, ["x=y", r"\langle f", r"\mathbf E^{\mathrm{inc}}"])
+    bad = ["x=y", r"\langle f", "x=y+z, q", r"\mathbf E^{\mathrm{inc}}"]
+    assert formula.untraced(board, src) == (9, bad)

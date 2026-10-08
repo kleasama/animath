@@ -53,7 +53,13 @@ def doc() -> DocIR:
 def graph() -> KnowledgeGraph:
     return KnowledgeGraph(
         nodes=(
-            Node(id="efie", kind=NodeKind.EQUATION, name="EFIE", sources=("b1",)),
+            Node(
+                id="efie",
+                kind=NodeKind.EQUATION,
+                name="EFIE",
+                latex=r"\mathbf{Z}\mathbf{I}=\mathbf{V}",
+                sources=("b1",),
+            ),
             Node(id="mom", kind=NodeKind.ALGORITHM, name="MoM", key=True, sources=("b1", "b2")),
         ),
         edges=(Edge(src="mom", dst="efie", rel=Relation.DEPENDS_ON),),

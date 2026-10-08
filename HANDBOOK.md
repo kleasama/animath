@@ -217,6 +217,7 @@ Brief lines map one to one onto passes (`{}` replaced by the item), or one brief
 | loop | at least two items and one line; $s \ge 1$; one brief line per later item, or one without `{}` |
 | lines | bookmarks do not start with `#` (kept for unnamed lines); pauses, computed ones included, in $[0, 30]$ s |
 | views | `view` and `until` are strings; a continued view keeps its args (§7.4) |
+| formulas | `math`, `equation` latex and `derive` steps traced (Algorithm 12.3) to the latex of the selected nodes |
 | scene | at least one visual; nodes within the selection; `Scene` validators |
 | board | (7.3); seed coverage $\ge 0.9$ ($Q_5$); unique scene ids |
 
@@ -240,6 +241,7 @@ Brief lines map one to one onto passes (`{}` replaced by the item), or one brief
 | P10 | A view continues its last visual even after a gap, re-entering with the replayed state | a view gives way to a zoom and returns unchanged |
 | P11 | Word actions also carry their estimated fraction of the slot | without word times the action still fires near its word, not at the line start |
 | P12 | Spoken words from the narration's verbalizer, and its lead and gaps | the estimate is the narration's length; weighted tokens misjudge formulas: $\int_{-1}^{1} f(x)\,dx$ is read in 12 words, weighted 9 |
+| P13 | On-screen formulas traced to the nodes at plan time | node latex is copied from $\mathcal D$ (X1), so an admissible board has $N_1 = 1$; the model learns which formula is foreign, and worked values move to data requests |
 
 7.7 Performance: `tests/plan` ≈ 5 s on 4 cores (dominated by importing `scene` for the real catalog).
 ## 8 Numerics
@@ -607,7 +609,7 @@ $f$ the animate function's qualified name, $\pi_5$ = (`width`, `height`, `fps`, 
 
 12.4 Budget (N9). After each LLM stage the summed usage $u$ costs $c = p\cdot u / 10^6$ USD with per-MTok prices $p$ (input, output, cache read, cache write) from `PRICES` (`claude-opus-5-5`: 4, 20, 0.2, 5). $c >$ `budget_usd` raises `PipelineError`; a model without prices raises when a budget is set.
 
-12.5 Metrics (SPEC §5), `eval.metrics`, `eval.formula`, `eval.judge`; `eval.evaluate(store, manifest, expected, llm)` reads every input from the manifest.
+12.5 Metrics (SPEC §5), `eval.metrics`, `eval.formula` (over `core.formula`), `eval.judge`; `eval.evaluate(store, manifest, expected, llm)` reads every input from the manifest.
 
 | Metric | Definition | Source |
 |---|---|---|
@@ -622,7 +624,7 @@ $f$ the animate function's qualified name, $\pi_5$ = (`width`, `height`, `fps`, 
 
 `metrics.failures` lists metrics missing their target (`TARGETS`).
 
-**Algorithm 12.3 (equivalence, N1, I2).** Normalization: drop spacing and sizing commands (`\,`, `\quad`, `\left`, `\big`, …) and `&`, tokenize into control words, control symbols and characters, unwrap braces around a single token, strip trailing `.,;`; compare token sequences. Equivalence: parse by SymPy `parse_latex` (Lark backend, font commands removed); an ambiguous parse yields all readings; equalities $a = b$, $c = d$ agree iff $(a-b) \mp (c-d)$ simplifies to 0, expressions iff $a - b$ does. Verdict: True if some pair agrees, False if none, None if either side does not parse. Formulas shown are `math`, `equation` latex and `derive` steps (match markers `{{…}}` removed pairwise). References are the equations and the inline math of $\mathcal D$, each with its parts split at `,`, `;`, `\\` outside brackets. A formula is traced iff it matches a reference (normalized or equivalent), or, as a derive step, is equivalent to its predecessor.
+**Algorithm 12.3 (equivalence, N1, I2).** Normalization: drop spacing and sizing commands (`\,`, `\quad`, `\left`, `\big`, …; not the second `\` of `\\`) and `&`, tokenize into control words, control symbols and characters, unwrap braces around a single token, strip trailing `.,;`; compare token sequences. Equivalence: parse by SymPy `parse_latex` (Lark backend, font commands removed); an ambiguous parse yields all readings; equalities $a = b$, $c = d$ agree iff $(a-b) \mp (c-d)$ simplifies to 0, expressions iff $a - b$ does. Verdict: True if some pair agrees, False if none, None if either side does not parse. Formulas shown are `math`, `equation` latex and `derive` steps (match markers `{{…}}` removed pairwise). References are the equations and the inline math of $\mathcal D$, each with its items: split at `,`, `;`, `\\` outside brackets and environments, layout environments (`gathered`, `aligned`, `split`) dropped. A formula is traced iff it matches a reference (normalized or equivalent), its items all do, or, as a derive step, it is equivalent to its predecessor. `core.formula` implements it; the planner applies it to the selected nodes (§7).
 
 12.6 Golden run (C5). Requires `ANIMATH_API_KEY` (§2.3) as an environment variable. For each case: `animath run <source> -p approval_gates=false`, then `animath eval <manifest> --expected tests/golden/<case>/expected.json --judge`.
 
@@ -653,6 +655,7 @@ $f$ the animate function's qualified name, $\pi_5$ = (`width`, `height`, `fps`, 
 | `h2.rss`, $n = 4096$, `tol` 1e-5 | factorisation 3.2 s; with the dense reference 8 s |
 | `hierarchy`, full instance, 13 steps, 1080p30 | 85 s for 20.5 s of video (71 s before verbs, same machine); about 850 items per state, all redrawn while a step plays |
 | `hierarchy`, full instance, 28 word-timed actions, 240p15 draft with the pacing renderer | 73 s for 48 s of video; 0.12 s per redrawn frame |
+| Planner formula check, 11 scenes, 13 formulas against 96 node formulas | 2.5 s on the first draft, 0.04 s per repair (verdicts cached) |
 
 ## 14 Decisions log
 

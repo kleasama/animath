@@ -12,7 +12,7 @@ from animath.plan.check import build
 from animath.plan.draft import SYSTEM, Draft, Schemas, prompt, repair
 from animath.plan.select import Selection, select
 
-VERSION = "3"
+VERSION = "4"
 PLAN_PARAMS = {"duration_s", "wpm", "audience", "focus", "language", "max_retries"}
 __all__ = ["VERSION", "Selection", "Speaker", "run", "select"]
 
