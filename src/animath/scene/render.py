@@ -279,7 +279,8 @@ class Delayed(Animation):
             try:
                 self.inner = prepare_animation(self.cue.play())
             except Exception as e:
-                raise AnimateError(f"{self.cue.what or 'cue'} failed: {e}") from e
+                what = self.cue.what or f"cue at {self.cue.t:.2f} s"
+                raise AnimateError(f"{what} failed: {type(e).__name__}: {e}") from e
             self.inner.run_time = max(self.k, 1) / self.fps
             self.inner._setup_scene(self.scene)
             self.inner.begin()

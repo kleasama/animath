@@ -405,11 +405,12 @@ Overlapping cues keep their own run times, every cue starts on its own frame ($Q
 9.8 Implementation notes.
 1. `manim.Scene.play` overwrites `self.duration`; the clip end time is kept in `Clip.t_end`.
 2. PyVista renders through OSMesa (`VTK_DEFAULT_OPENGL_WINDOW=vtkOSOpenGLRenderWindow`, set if absent); requires `libosmesa6`.
-3. Build failures (e.g. LaTeX errors) are re-raised as `AnimateError` naming `scene.visual:primitive`, for the repair loop; a cue failing while it plays names its action.
+3. Build failures (e.g. LaTeX errors) are re-raised as `AnimateError` naming `scene.visual:primitive`, for the repair loop; a cue failing while it plays names its action, or its start time, and the exception type.
 4. Tests run Manim under `tempconfig` with a temporary `media_dir`; nothing is written to the working tree.
 5. `Scene.play` begins every animation at its start; `Delayed` defers `begin` to its own frame, because `.animate` targets, `last()` of a derivation and morph sources depend on the state at that moment.
 6. `TransformMatchingTex` replaces its source by its target in the scene; `derive` tracks the step shown, and entries, exits and morphs read it when they play.
 7. Cairo `Scene.remove` of a part splits its visual into the remaining parts at the top level. `Clip.remove` also drops those parts when the visual leaves, and `Clip.replace` removes and adds when a morph source was split. A `play` in which nothing on screen moves redraws every frame: Manim would draw the entering mobject over a cached frame and so draw translucent mobjects (`dim`) twice.
+8. `Write` is an introducer: Manim adds its mobject to the scene. For a TeX part, a new group of the visual's glyphs, that splits the visual, and the group would join it as a submobject that `TransformMatchingTex` rejects as a morph source. `show` therefore writes in place, without introducing.
 
 9.9 Scene generation (WP8). `scene.animate(scene, data, narration, store, llm, params) -> (SceneRender, Usage)` realizes $\Phi_5$; `data` maps request digests to `DataSet`; `Usage` sums every LLM call of the invocation (codegen, repair, critic) and is zero on a key hit. With $\pi_5$ = (`width`, `height`, `fps`, `wpm`, `max_retries`) and $D_s = [d(\text{DataSet of } r) \text{ or null} : r \in \texttt{scene.data}]$,
 $$k_{\text{animate}} = d\big([\texttt{animate}, v, d(s), d([D_s, d(\text{Narration}) \text{ or null}, \pi_5])]\big). \tag{9.5}$$

@@ -147,10 +147,13 @@ def path(m: Mobject, sel: str) -> Mobject:
 
 
 def verb(do: str, p: Mobject, orig: Mobject, c: ManimColor) -> Animation:
-    """Generic verb on part `p`; `orig` is its unchanged copy."""
+    """Generic verb on part `p`; `orig` is its unchanged copy. `show` writes `p` in its visual,
+    not as a new object of the scene, which would split the visual."""
     if do == "show" and isinstance(p, VMobject):
         p.match_style(cast(VMobject, orig))
-        return Write(p)
+        w = Write(p)
+        w.introducer = False
+        return w
     if do == "indicate":
         return Indicate(p, color=c) if isinstance(p, VMobject) else Circumscribe(p, color=c)
     if do in ("show", "hide", "dim"):
