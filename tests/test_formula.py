@@ -13,6 +13,7 @@ from animath.core.schemas import Line, Scene, Visual
         (r"\mathrm{d}x", r"\mathrm dx"),
         (r"\frac{1}{\sqrt{3}}", r"\frac1{\sqrt3}"),
         (r"a &= b", "a = b"),
+        (r"s_{i}\,Z\;t\!u", "s_i Z t u"),
     ],
 )
 def test_normalize_equal(a: str, b: str) -> None:
@@ -77,6 +78,12 @@ REFS = ["x=y+z", r"\mathbf Z\mathbf I=\mathbf V", r"\begin{bmatrix} a & b \\ c &
 )
 def test_traced(f: str, prev: str | None, verdict: bool) -> None:
     assert formula.traced(f, prev, REFS) is verdict
+
+
+def test_traced_item_with_control_symbol() -> None:
+    ref = r"A_{ij}=s_{\pi(i)}\,Z_{\pi(i)\pi(j)}\,s_{\pi(j)}"
+    f = rf"\begin{{gathered}}|A_{{ii}}|=1\\ {ref}\end{{gathered}}"
+    assert formula.traced(f, None, [ref, "|A_{ii}|=1"])
 
 
 def test_untraced_scene() -> None:

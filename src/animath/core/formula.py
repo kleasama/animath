@@ -14,7 +14,7 @@ from animath.core.schemas import Scene
 
 TOKEN = re.compile(r"\\[a-zA-Z]+|\\.|\S")
 DROP = re.compile(
-    r"(?<!\\)\\(?:[,;:!> ]|q?quad|displaystyle|textstyle|left|right|[bB]igg?[lr]?)(?![a-zA-Z])"
+    r"(?<!\\)\\(?:[,;:!> ]|(?:q?quad|displaystyle|textstyle|left|right|[bB]igg?[lr]?)(?![a-zA-Z]))"
     r"|~|(?<!\\)&"
 )
 FONT = re.compile(r"\\(?:mathbf|mathrm|mathit|boldsymbol|bm|mathsf|mathcal)\s*")
