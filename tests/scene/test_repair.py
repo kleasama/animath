@@ -89,6 +89,15 @@ def test_repair_memo_ignores_pitfalls(store: Store) -> None:
     repair(S, ["s.1:text: other"], Fake(Patch(fixes=[fix(1)])), store)
 
 
+def test_repair_memo_per_model(store: Store) -> None:
+    a, b = Fake(Patch(fixes=[fix(1)])), Fake(Patch(fixes=[fix(1)]))
+    a.tag, b.tag = "m:low", "m:high"  # type: ignore[attr-defined]
+    repair(S, ["s.1:text: bad"], a, store)
+    repair(S, ["s.1:text: bad"], b, store)
+    repair(S, ["s.1:text: bad"], a, store)
+    assert (len(a.calls), len(b.calls)) == (1, 1)
+
+
 def test_repair_whole_scene(store: Store) -> None:
     llm = Fake(Patch(fixes=[fix(0)]))
     repair(S, ["scene s: render failed: x"], llm, store)

@@ -72,4 +72,3 @@ Legend: ✓ done · ✱ in progress · ○ open · ⏸ checkpoint (review, commi
 
 | # | Bug | Owner |
 |---|---|---|
-| B3 | Repair memo key omits the model tag | integrator |

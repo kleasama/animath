@@ -104,7 +104,7 @@ def repair(
         "repair": allowed,
         "pitfalls": pitfalls(store, [scene.visuals[i].primitive for i in allowed]),
     }
-    key = digest_of([SYSTEM, scene.model_dump(mode="json"), errors])
+    key = digest_of([getattr(llm, "tag", None), SYSTEM, scene.model_dump(mode="json"), errors])
     if (d := store.ref("repair", key)) is not None:
         patch, usage = Patch.model_validate_json(store.get_blob(d)), Usage()
     else:
