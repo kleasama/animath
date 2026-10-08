@@ -74,3 +74,11 @@ def test_order_waits_for_all_prerequisites() -> None:
     g = KnowledgeGraph(nodes=g.nodes, edges=(*g.edges, Edge(src="r", dst="c0", rel=D)))
     ids = [n.id for n in select(g, Params(audience=Audience.EXPERT)).nodes]
     assert ids == ["c0", "x", "c2", "r"]
+
+
+def test_context_is_the_other_formula_nodes() -> None:
+    g = chain()
+    z = g.nodes[0].model_copy(update={"latex": "z"})
+    g = KnowledgeGraph(nodes=(z, *g.nodes[1:]), edges=g.edges)
+    assert select(g, Params(audience=Audience.EXPERT)).context == (z,)
+    assert select(g, Params(focus="b9")).context == (g.nodes[2],)

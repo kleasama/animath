@@ -182,8 +182,9 @@ $$k_{\text{plan}} = d\big([\texttt{plan}, v, d(\mathcal{K}), d([\pi_3, \text{cat
 2. Breadth-first closure from $S$ along all out-edges; hop $h(v)$; expansion stops at depth $\delta$ = ∞, 2, 1 for undergraduate, graduate, expert.
 3. Budget $N = \max(|S|, \lceil T/15 \rceil)$: keep the $N$ nodes least in $(h, \text{graph order})$; seeds and every kept node's parent survive.
 4. Order by Kahn's algorithm on `depends_on` (prerequisite first), ties by graph order.
+5. Context: the other nodes with `latex`, in graph order; scenes may show their formulas (Algorithm 7.2).
 
-7.2 Draft. The model returns `Draft`: scenes with `narration`, an optional `loop` and `after` lines, visuals (`args` a JSON string), data requests (`params` a JSON string), node ids, symbols. A line (`DLine`) carries `text`, `bookmark`, `pause` (s) and `actions` $(\texttt{visual}, \texttt{do}, \texttt{parts}, \texttt{word}, \texttt{color})$; a loop (`DLoop`) carries items `over`, first-pass `lines`, `brief` lines and `speedup` $s$ (default 2). JSON strings keep the output schema closed for structured outputs. The prompt carries audience, $T$, `wpm`, scene target $\max(1, \operatorname{round}(T/40))$, word target $\operatorname{round}(0.85\,\rho T)$ with $\rho$ = `wpm`/60, seeds, selected nodes and edges, catalog, kernels.
+7.2 Draft. The model returns `Draft`: scenes with `narration`, an optional `loop` and `after` lines, visuals (`args` a JSON string), data requests (`params` a JSON string), node ids, symbols. A line (`DLine`) carries `text`, `bookmark`, `pause` (s) and `actions` $(\texttt{visual}, \texttt{do}, \texttt{parts}, \texttt{word}, \texttt{color})$; a loop (`DLoop`) carries items `over`, first-pass `lines`, `brief` lines and `speedup` $s$ (default 2). JSON strings keep the output schema closed for structured outputs. The prompt carries audience, $T$, `wpm`, scene target $\max(1, \operatorname{round}(T/40))$, word target $\operatorname{round}(0.85\,\rho T)$ with $\rho$ = `wpm`/60, seeds, selected nodes and edges, context formulas (`formulas`: id $\mapsto$ latex), catalog, kernels.
 
 7.3 Pacing. Line $\ell$ of $n_\ell$ spoken words lasts $s_\ell = n_\ell/\rho$. $n_\ell$ counts the words of `speaker.lines`, one call for all lines of a draft; without a speaker it is estimated: a token is a TeX control word or an alphanumeric run, tokens in inline math weigh 1.5. The slot of $\ell$ is
 $$\sigma_\ell = s_\ell + p_\ell + g\,[\ell \text{ ends an utterance and is not last}], \qquad g = 0.35\ \text{s}, \tag{7.2}$$
@@ -217,7 +218,7 @@ Brief lines map one to one onto passes (`{}` replaced by the item), or one brief
 | loop | at least two items and one line; $s \ge 1$; one brief line per later item, or one without `{}` |
 | lines | bookmarks do not start with `#` (kept for unnamed lines); pauses, computed ones included, in $[0, 30]$ s |
 | views | `view` and `until` are strings; a continued view keeps its args (§7.4) |
-| formulas | `math`, `equation` latex and `derive` steps traced (Algorithm 12.3) to the latex of the selected nodes |
+| formulas | `math`, `equation` latex and `derive` steps traced (Algorithm 12.3) to the latex of the selected and context nodes |
 | scene | at least one visual; nodes within the selection; `Scene` validators |
 | board | (7.3); seed coverage $\ge 0.9$ ($Q_5$); unique scene ids |
 
@@ -242,6 +243,7 @@ Brief lines map one to one onto passes (`{}` replaced by the item), or one brief
 | P11 | Word actions also carry their estimated fraction of the slot | without word times the action still fires near its word, not at the line start |
 | P12 | Spoken words from the narration's verbalizer, and its lead and gaps | the estimate is the narration's length; weighted tokens misjudge formulas: $\int_{-1}^{1} f(x)\,dx$ is read in 12 words, weighted 9 |
 | P13 | On-screen formulas traced to the nodes at plan time | node latex is copied from $\mathcal D$ (X1), so an admissible board has $N_1 = 1$; the model learns which formula is foreign, and worked values move to data requests |
+| P14 | Formulas of the whole graph may be shown, not only of the selection | a deeper video quotes consequences of the seeds and equations past the hop limit; all node latex comes from $\mathcal D$, so $N_1 = 1$ holds |
 
 7.7 Performance: `tests/plan` ≈ 5 s on 4 cores (dominated by importing `scene` for the real catalog).
 ## 8 Numerics

@@ -51,10 +51,11 @@ Rules:
    p in {abs, real, imag}; `part` is required outside `matrix`.
 10. A data request has a kind of the kernel catalog and `params` as a JSON object
    valid against its schema.
-11. On-screen formulas (`math`, `equation`, `derive` steps) are formulas of the nodes in
-   their notation, items of them, or lists of these; a `derive` step may instead be
-   equivalent to the step before it. Values worked out for an example come from data
-   requests, shown by data visuals such as `matrix`, never typed into a formula.
+11. On-screen formulas (`math`, `equation`, `derive` steps) are formulas of the nodes or
+   of `formulas` (the source's other nodes) in their notation, items of them, or lists of
+   these; a `derive` step may instead be equivalent to the step before it. Values worked
+   out for an example come from data requests, shown by data visuals such as `matrix`,
+   never typed into a formula.
 12. Cover every seed node. List symbols as LaTeX with their meaning.
 When errors of a previous draft are given, return a corrected full draft."""
 
@@ -132,6 +133,7 @@ def prompt(
         "words_target": round(p.wpm / 60 * SPEECH * p.duration_s),
         "seeds": sorted(sel.seeds),
         "nodes": [n.model_dump(exclude={"sources"}, exclude_none=True) for n in sel.nodes],
+        "formulas": {n.id: n.latex for n in sel.context},
         "edges": [e.model_dump() for e in g.edges if e.src in ids and e.dst in ids],
         "catalog": dict(catalog),
         "kernels": dict(kernels),
