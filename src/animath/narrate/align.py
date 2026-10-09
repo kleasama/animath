@@ -41,7 +41,7 @@ def fade(pcm: PCM, rate: int) -> PCM:
 def timeline(
     utterances: Sequence[Utterance], rate: int
 ) -> tuple[PCM, list[Word], dict[str, float]]:
-    """Algorithm 10.3: trimmed, faded utterances placed by their words (LEAD_S, GAP_S + pause,
+    """Trimmed, faded utterances placed by their words (LEAD_S, GAP_S + pause,
     TAIL_S); returns PCM, word times and bookmark times (starts of their words)."""
     clips: list[tuple[int, PCM]] = []
     words: list[Word] = []

@@ -45,7 +45,7 @@ def seeds(g: KnowledgeGraph, focus: str | None) -> list[str]:
 
 
 def select(g: KnowledgeGraph, p: Params) -> Selection:
-    """Algorithm 7.1: hop-limited, budgeted prerequisite closure of the seeds, ordered, and the
+    """Hop-limited, budgeted prerequisite closure of the seeds, ordered, and the
     other nodes with latex as context."""
     s = seeds(g, p.focus)
     out: dict[str, list[str]] = {n.id: [] for n in g.nodes}

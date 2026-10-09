@@ -1,4 +1,4 @@
-"""Quality metrics Q1..Q6 of HANDBOOK §1.4 on stored artifacts."""
+"""Quality metrics Q1..Q6 on stored artifacts."""
 
 from collections.abc import Mapping
 
@@ -49,7 +49,7 @@ def q4(renders: Mapping[str, SceneRender]) -> float:
 
 
 def q5(graph: KnowledgeGraph, board: Storyboard) -> float:
-    """Fraction of key nodes addressed by some scene (HANDBOOK §6.3)."""
+    """Fraction of key nodes addressed by some scene."""
     key = {n.id for n in graph.nodes if n.key}
     seen = {n for s in board.scenes for n in s.nodes}
     return len(key & seen) / len(key) if key else 1.0
@@ -87,7 +87,7 @@ def automatic(
 
 
 def failures(values: Mapping[str, float]) -> list[str]:
-    """Metrics of `values` missing their HANDBOOK §1.4 target."""
+    """Metrics of `values` missing their target."""
     return sorted(
         k
         for k, v in values.items()

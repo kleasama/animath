@@ -230,7 +230,7 @@ def compose(scene: Scene, ctx: Context, tl: Timeline, f: Box) -> list[Item]:
 
 
 def schedule(cues: list[Cue], duration: float, fps: int) -> list[Step]:
-    """Algorithm 9.2: cues as frame intervals, merged into clusters where they overlap."""
+    """cues as frame intervals, merged into clusters where they overlap."""
     end = round(duration * fps)
     starts = sorted(
         ((round(c.t * fps), k, c) for k, c in enumerate(cues) if round(c.t * fps) < end),

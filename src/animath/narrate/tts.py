@@ -122,7 +122,7 @@ def fields(buf: bytes, pos: int, end: int) -> Iterator[tuple[int, int, int, int]
 
 def with_outputs(model: bytes, names: Sequence[str], prune: bool = False) -> bytes:
     """ONNX `model` with tensors `names` added as graph outputs or, if `prune`, as its only outputs
-    with just their ancestor nodes and initializers (HANDBOOK §10.4)."""
+    with just their ancestor nodes and initializers."""
     m = memoryview(model)
 
     def strings(lo: int, hi: int, tag: int) -> set[str]:
@@ -165,8 +165,8 @@ def fit(d: npt.NDArray[np.float32], speed: float) -> float:
 
 
 class Kokoro:
-    """Kokoro-82M v1.0 ONNX voice from the model files in `root` (HANDBOOK §10.2); word spans from
-    predicted token durations (Algorithm 10.1)."""
+    """Kokoro-82M v1.0 ONNX voice from the model files in `root`; word spans from
+    predicted token durations."""
 
     rate, hop, max_tokens, headroom = 24000, 600, 510, 0.5
     model, voices = "kokoro-v1.0.onnx", "voices-v1.0.bin"

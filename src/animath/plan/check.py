@@ -77,7 +77,7 @@ def _act(a: DAction, at: str, item: str | None, **extra: Any) -> tuple[int, dict
 def script(
     ds: DScene, wpm: int, errors: list[str], count: Callable[[str], float] = words
 ) -> list[Beat]:
-    """Algorithm 7.2: lines, loop passes and holds, with onsets estimated at `wpm` from `count`
+    """Lines, loop passes and holds, with onsets estimated at `wpm` from `count`
     words per line; a word action also carries its estimated offset in the slot, the fallback
     without word times."""
     where = f"scene {ds.id}"
@@ -160,7 +160,7 @@ def replay(
     count: Callable[[str], float],
 ) -> None:
     """Later passes replay the first pass's actions under the brief lines: pass q lasts
-    D_q = max(D_1 / s^q, n STEP_S) (7.5), at rate D_1 / D_q."""
+    D_q = max(D_1 / s^q, n STEP_S), at rate D_1 / D_q."""
     onsets(beats, wpm, count)
     i0 = beats.index(briefs[0]) - len(lines)
     d1 = sum(slot(beats, i) for i in range(i0, i0 + len(lines)))
@@ -242,7 +242,7 @@ def plan(
     errors: list[str],
     count: Callable[[str], float] = words,
 ) -> Plan:
-    """Algorithm 7.3, scene part: script, catalog, data, action, cue, region and node checks;
+    """Scene part: script, catalog, data, action, cue, region and node checks;
     a visual naming a view continues its last visual, taking over its args and state."""
     where = f"scene {ds.id}"
     data: list[DataRequest] = []
@@ -376,7 +376,7 @@ def build(
     wpm: int = 135,
     said: Said | None = None,
 ) -> tuple[Storyboard | None, list[str]]:
-    """Algorithm 7.3: validated Storyboard with durations in proportion to the estimated
+    """Validated Storyboard with durations in proportion to the estimated
     speech, gaps and pauses, or the errors; `said` gives the spoken form of lines."""
     if not d.scenes:
         return None, ["no scenes"]

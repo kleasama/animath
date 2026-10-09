@@ -1,4 +1,4 @@
-"""Evaluation of a produced video against HANDBOOK §1.4."""
+"""Evaluation of a produced video."""
 
 from animath.core.schemas import (
     DocIR,

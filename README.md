@@ -11,19 +11,9 @@ animath run notes.tex --section 2.1 -p duration_s=300
 → video.mp4  subs.vtt  manifest.json
 ```
 
-## How it works
+Each stage stores its output by content hash, so an interrupted or edited run resumes where its input changed.
 
-| Stage | Map | Module |
-|---|---|---|
-| $\Phi_1$ Ingest | source $\to$ document IR $\mathcal{D}$ | `ingest` |
-| $\Phi_2$ Extract | $\mathcal{D} \to$ knowledge graph $\mathcal{K}$ | `extract` |
-| $\Phi_3$ Plan | $\mathcal{K} \to$ storyboard $\mathcal{B}$ | `plan` |
-| $\Phi_4$ Compute | data requests $\to$ arrays | `numerics` |
-| $\Phi_6$ Narrate | $\mathcal{B} \to$ speech, captions, word times | `narrate` |
-| $\Phi_5$ Animate | scenes $\to$ Manim clips | `scene` |
-| $\Phi_7$ Assemble | clips, speech $\to$ MP4 | `assemble` |
-
-Artifacts are content-addressed: an interrupted or edited run resumes at the first stage whose input changed. Claude reads the document, plans the storyboard and reviews rendered frames. Every formula on screen traces to the source.
+**Status:** experimental. The Docker image and the API path have not been run end to end.
 
 ## Install
 
@@ -64,16 +54,9 @@ make check        # lint, types, tests
 
 `animath --help` lists the other commands: `config`, `schema`, `inspect`, `stage` (one stage on a stored input), `eval` (quality metrics of a video).
 
-## Documentation
-
-| Document | Content |
-|---|---|
-| [`HANDBOOK.md`](HANDBOOK.md) | requirements, architecture, contracts, algorithms, decisions, performance |
-| [`PROGRESS.md`](PROGRESS.md) | checklist, open questions, known bugs |
-
 ## Contributing
 
-Fork, branch and open a pull request. `make check` must pass: ruff, mypy `--strict`, pytest with ≥ 95 % line and branch coverage, and a licence audit. Read a module's HANDBOOK chapter before changing it.
+Open a pull request; `make check` (ruff, mypy `--strict`, pytest with ≥ 95 % coverage, licence audit) must pass.
 
 ## License
 
