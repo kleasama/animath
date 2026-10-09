@@ -1,4 +1,4 @@
-"""Orchestration of Phi_1..Phi_7 (SPEC §6.1, HANDBOOK §12)."""
+"""Orchestration of Phi_1..Phi_7."""
 
 import io
 import multiprocessing as mp
@@ -368,7 +368,7 @@ class Pipeline:
     def run(
         self, b: SourceBundle, edit: str | None = None, part: str | None = None
     ) -> Manifest | Paused:
-        """Algorithm 12.1. `edit` approves the first pending gate ('' as is, else by JSON);
+        """`edit` approves the first pending gate ('' as is, else by JSON);
         `part` restricts D to a section path."""
         p, pending = b.params, [edit]
         doc = self.ingest(b)

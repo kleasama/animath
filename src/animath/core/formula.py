@@ -1,4 +1,4 @@
-"""Formula matching (Algorithm 12.3): normalized tokens, then SymPy equivalence."""
+"""Formula matching: normalized tokens, then SymPy equivalence."""
 
 import re
 from collections.abc import Sequence

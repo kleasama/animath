@@ -1,5 +1,5 @@
 BIN := .venv/bin
-# pycairo: LGPL-2.1-only OR MPL-1.1, used under MPL-1.1 (SPEC N10)
+# pycairo: LGPL-2.1-only OR MPL-1.1, used under MPL-1.1
 LICENSE_EXEMPT := animath pycairo
 .PHONY: setup lock check lint type test licenses
 setup:

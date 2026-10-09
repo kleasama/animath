@@ -16,7 +16,7 @@ TOL_S = 0.1
 
 
 def timeline(durations: Sequence[float], fps: Fraction) -> tuple[list[int], list[int]]:
-    """Frames n_i and audio samples S_i per segment, Eq. (11.1)."""
+    """Frames n_i and audio samples S_i per segment."""
     frames = [math.ceil(fps * Fraction(d) - Fraction(1, 10**6)) for d in durations]
     ends = [0, *(round(ffmpeg.RATE * sum(frames[: i + 1]) / fps) for i in range(len(frames)))]
     return frames, [b - a for a, b in pairwise(ends)]

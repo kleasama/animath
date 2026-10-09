@@ -1,4 +1,4 @@
-"""Stage Φ5: (Scene, DataSet, Narration) -> SceneRender (SPEC Algorithm 6.1)."""
+"""Stage Φ5: (Scene, DataSet, Narration) -> SceneRender."""
 
 from collections.abc import Mapping
 
@@ -49,7 +49,7 @@ def animate(
     llm: LLM,
     params: Params,
 ) -> tuple[SceneRender, Usage]:
-    """Algorithm 9.3 with the usage of all LLM calls; Usage() on a stage key hit. Not thread-safe;
+    """With the usage of all LLM calls; Usage() on a stage key hit. Not thread-safe;
     parallelize over processes."""
     inputs = [digest_of(data[r.digest]) if r.digest in data else None for r in scene.data]
     key = Store.key(
