@@ -677,3 +677,4 @@ $f$ the animate function's qualified name, $\pi_5$ = (`width`, `height`, `fps`, 
 | D11 | 2026-10-07 | `hierarchy` morphs keyed items with per-item `Transform`s | `Scene.add` dissolves groups not yet in the scene |
 | D12 | 2026-10-07 | User-supplied arrays enter as `data.npz` by path and SHA-256 | external runs feed primitives without new kernels; the hash pins cache and content |
 | D13 | 2026-10-07 | `hierarchy` advances a live state when a step or action plays, not a plan made at build | word-timed actions fire in play order, and continued views replay them at build |
+| D14 | 2026-10-09 | BSD 3-Clause licence; repository public | open use; dependencies audited to exclude GPL/AGPL (`make licenses`) |

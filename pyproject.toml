@@ -1,11 +1,15 @@
 [build-system]
-requires = ["hatchling>=1.25"]
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
 name = "animath"
 version = "0.1.0"
 description = "Mathematical source to educational video."
+readme = "README.md"
+license = "BSD-3-Clause"
+license-files = ["LICENSE"]
+authors = [{ name = "Klearchos Samaras", email = "kleasama@gmail.com" }]
 requires-python = ">=3.12"
 dependencies = [
     "anthropic>=1.11,<2",
@@ -23,6 +27,9 @@ dependencies = [
     "scipy>=1.16",
     "sympy>=1.14,<2",
 ]
+
+[project.urls]
+Repository = "https://github.com/kleasama/animath"
 
 [project.scripts]
 animath = "animath.cli:main"
