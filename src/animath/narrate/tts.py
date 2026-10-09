@@ -20,12 +20,8 @@ Spans = list[tuple[int, int]]
 
 
 class TTS(Protocol):
-    """Text to mono 16-bit PCM at `rate` Hz with the sample span of each whitespace-separated word.
-
-    `natural` is the speech length in seconds at speed 1, which `synth` divides by `speed`;
-    `wpm` is the target rate in spoken words per minute. `id` determines the output for a given
-    text and speed.
-    """
+    """Text to mono int16 PCM at `rate` Hz with per-word sample spans; `natural` is the length in
+    seconds at speed 1, `wpm` the target rate, `id` determines the output."""
 
     id: str
     rate: int
@@ -125,12 +121,8 @@ def fields(buf: bytes, pos: int, end: int) -> Iterator[tuple[int, int, int, int]
 
 
 def with_outputs(model: bytes, names: Sequence[str], prune: bool = False) -> bytes:
-    """ONNX `model` with tensors `names` appended to the graph outputs or, if `prune`, as its only
-    outputs with only the nodes and initializers they depend on.
-
-    ModelProto field 7 is the GraphProto: nodes 1 (NodeProto: inputs 1, outputs 2), initializers 5
-    (TensorProto: name 8), outputs 12 (ValueInfoProto: name 1). Nodes are in topological order.
-    """
+    """ONNX `model` with tensors `names` added as graph outputs or, if `prune`, as its only outputs
+    with just their ancestor nodes and initializers (HANDBOOK §10.4)."""
     m = memoryview(model)
 
     def strings(lo: int, hi: int, tag: int) -> set[str]:
@@ -173,13 +165,8 @@ def fit(d: npt.NDArray[np.float32], speed: float) -> float:
 
 
 class Kokoro:
-    """Kokoro-82M v1.0 ONNX, release `model-files-v1.0` of thewh1teagle/kokoro-onnx.
-
-    `root` holds `kokoro-v1.0.onnx`, `voices-v1.0.bin` (npz, voice -> 510 x 1 x 256 float32) and
-    `config.json` (key `vocab`). Word spans come from the predicted token durations, which the model
-    rounds to whole frames after dividing by the speed input; `predictor` is the graph pruned to the
-    unrounded durations at speed 1, from which `synth` picks the input that scales them exactly.
-    """
+    """Kokoro-82M v1.0 ONNX voice from the model files in `root` (HANDBOOK §10.2); word spans from
+    predicted token durations (Algorithm 10.1)."""
 
     rate, hop, max_tokens, headroom = 24000, 600, 510, 0.5
     model, voices = "kokoro-v1.0.onnx", "voices-v1.0.bin"

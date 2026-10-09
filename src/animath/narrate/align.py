@@ -41,13 +41,8 @@ def fade(pcm: PCM, rate: int) -> PCM:
 def timeline(
     utterances: Sequence[Utterance], rate: int
 ) -> tuple[PCM, list[Word], dict[str, float]]:
-    """Utterances trimmed by `bounds` and faded, placed by their words: the first word at LEAD_S,
-    the first word of the next utterance GAP_S plus the pause after the last word of the previous
-    one, later only where audio would overlap; the end max(TAIL_S, pause) after the last word.
-
-    Word times are the spans shifted to the timeline; a bookmark (name -> word index in its
-    utterance) is the start of that word.
-    """
+    """Algorithm 10.3: trimmed, faded utterances placed by their words (LEAD_S, GAP_S + pause,
+    TAIL_S); returns PCM, word times and bookmark times (starts of their words)."""
     clips: list[tuple[int, PCM]] = []
     words: list[Word] = []
     marks: dict[str, float] = {}

@@ -1,4 +1,4 @@
-"""Quality metrics Q1..Q6 of SPEC §5 on stored artifacts."""
+"""Quality metrics Q1..Q6 of HANDBOOK §1.4 on stored artifacts."""
 
 from collections.abc import Mapping
 
@@ -87,7 +87,7 @@ def automatic(
 
 
 def failures(values: Mapping[str, float]) -> list[str]:
-    """Metrics of `values` missing their SPEC §5 target."""
+    """Metrics of `values` missing their HANDBOOK §1.4 target."""
     return sorted(
         k
         for k, v in values.items()

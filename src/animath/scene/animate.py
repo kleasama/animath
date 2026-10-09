@@ -1,4 +1,4 @@
-"""Stage Φ5: (Scene, DataSet, Narration) -> SceneRender (SPEC Algorithm 6.1)."""
+"""Stage Φ5: (Scene, DataSet, Narration) -> SceneRender (HANDBOOK Algorithm 9.1)."""
 
 from collections.abc import Mapping
 

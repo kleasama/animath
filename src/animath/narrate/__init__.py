@@ -50,7 +50,7 @@ def narrate(
 ) -> dict[str, str]:
     """Phi_6: Narration digest per scene id, in storyboard order; cached scenes skip synthesis.
 
-    One speed for the storyboard brings its spoken words to `tts.wpm` (eq. 10.4).
+    One speed for the storyboard brings its spoken words to `tts.wpm` (eq. 10.2).
     """
     toks = iter(verbalizer.tokens([ln.text for s in board.scenes for ln in s.narration]))
     texts = {s.id: [next(toks) for _ in s.narration] for s in board.scenes}

@@ -1,4 +1,4 @@
-"""Orchestration of Phi_1..Phi_7 (SPEC §6.1, HANDBOOK §12)."""
+"""Orchestration of Phi_1..Phi_7 (HANDBOOK §1.5, §12)."""
 
 import io
 import multiprocessing as mp

@@ -1,74 +1,48 @@
 # Animath — Progress
 
-Legend: ✓ done · ✱ in progress · ○ open · ⏸ checkpoint (review, commit, fresh session).
+Legend: ✓ done · ✱ in progress · ○ open.
 
 ## Checklist
 
-| Step | Task | Status |
-|---|---|---|
-| 0.1 | Survey state of the art | ✓ |
-| 0.2 | Requirements, architecture, plan (`SPEC.md`) | ✓ |
-| 0.3 | Tracker and handbook skeleton | ✓ |
-| ⏸ C0 | User approves `SPEC.md`, answers §8 | ✓ |
-| 1.1 | `pyproject.toml`, `requirements.lock`, ruff, mypy --strict, pytest-cov gate 95%, `make check` | ✓ |
-| 1.2 | `core.errors`: typed exception hierarchy per stage | ✓ |
-| 1.3 | `core.schemas`: all contracts of SPEC §4 with validators | ✓ |
-| 1.4 | `core.store`: content-addressed, atomic, process-safe artifact store | ✓ |
-| 1.5 | `core.config`: settings from defaults, TOML, environment | ✓ |
-| 1.6 | `llm`: protocol, Claude adapter, replay cache | ✓ |
-| 1.7 | `cli.py` (`schema`, `inspect`, `config`); `docker/Dockerfile` | ✓ |
-| 1.8 | Licence audit in `make check`; GitHub Actions CI | ✓ |
-| ⏸ C1 | Foundation review (auto-approved); commit `95f0846` | ✓ |
-| 2.1 | WP1 ingest: MD → $\mathcal{D}$ | ✓ |
-| 2.2 | WP1 ingest: LaTeX flatten, macros, theorems, algorithms → $\mathcal{D}$ | ✓ |
-| 2.3 | WP1 ingest: PDF (source lookup, raster + Claude transcription) → $\mathcal{D}$ | ✓ |
-| 2.4 | WP1 equation check (compile); golden set and expected IR | ✓ |
-| 2.5 | WP2 numerics: quadrature, Krylov with trace capture, MoM/BEM toy kernels, data cache | ✓ |
-| 2.6 | WP3 scene: primitive library | ✓ |
-| 2.7 | WP3 scene: layout checker, renderer wrapper, PyVista bridge | ✓ |
-| 2.8 | WP4 narrate: SRE verbalization, Kokoro and espeak-ng TTS, bookmark timeline, VTT | ✓ |
-| 2.9 | WP5 assemble: concat, loudnorm, encode, manifest | ✓ |
-| ⏸ C2 | Stage modules review (auto-approved); group B integrated | ✓ |
-| 3.1 | WP6 extract: $\mathcal{K}$ with provenance | ✓ |
-| 3.2 | WP7 plan: subgraph selection, storyboard, symbol ledger, duration budget | ✓ |
-| ⏸ C3 | Semantics review (auto-approved); group C integrated | ✓ |
-| 4.1 | WP8 codegen with retrieval, static gate | ✓ |
-| 4.2 | WP8 repair loop, critic, pitfall memory | ✓ |
-| ⏸ C4 | Scene generation and pipeline review (auto-approved); integrated | ✓ |
-| 5.1 | WP9 orchestrator, resume, parallel scenes | ✓ |
-| 5.2 | WP9 evaluation harness ($Q_1$–$Q_7$) | ✓ |
-| 5.3 | WP9 end-to-end on golden set (session mode) | ✓ |
-| ⏸ C5 | Release v0.1 | ✓ |
+| # | Item | HANDBOOK | Status |
+|---|---|---|---|
+| 1 | Tooling: lock file, ruff, mypy `--strict`, coverage gate, licence audit, CI | §2 | ✓ |
+| 2 | `core`: errors, schemas, content-addressed store, config, formula matching | §3 | ✓ |
+| 3 | `llm`: protocol, Claude adapter, replay cache, session mode | §4 | ✓ |
+| 4 | Ingest MD, LaTeX, PDF; equation check; golden set | §5 | ✓ |
+| 5 | Extract $\mathcal{K}$ with provenance | §6 | ✓ |
+| 6 | Plan: selection, storyboard, pacing, loops, views, formula tracing | §7 | ✓ |
+| 7 | Numerics: quadrature, Krylov traces, MoM, BEM, `h2.rss`, `data.npz` | §8 | ✓ |
+| 8 | Scene: primitives, layout, renderer, codegen, repair, critic | §9 | ✓ |
+| 9 | Narrate: math speech, Kokoro and espeak-ng, word timeline, captions | §10 | ✓ |
+| 10 | Assemble: concatenation, loudness, encoding, subtitles, manifest | §11 | ✓ |
+| 11 | Pipeline: resume, gates, parallel scenes, budget; evaluation | §12 | ✓ |
+| 12 | Docker image built and run in CI | §1.6 | ○ |
+| 13 | Golden set re-run and evaluated with the current pacing model | §12.6 | ○ |
 
-## Notes
+## Status
 
-| Step | Note |
+| Item | Value |
 |---|---|
-| 0.1 | Survey covered ingestion, animation/numerics, generation loop/narration; conclusions in SPEC §6.3–6.4. |
-| C1 | Container: 4 cores, 15 GB RAM, no GPU, no TeX preinstalled (apt available), ffmpeg 6.1, pandoc 3.1. GPU parsers, GROBID, Typst, Blender, AV1, WhisperX trimmed (SPEC §6.3). |
-| 1.1–1.8 | 41 tests, 100% line+branch coverage, mypy strict clean, licence audit clean. |
-| 1.7 | Dockerfile not built: no container runtime in the session. |
-| 2.6–2.7 | 8 primitives (`text`, `equation`, `derive`, `matrix`, `plot`, `field`, `surface`, `trace`); grid layout check; frame-exact scheduler; deterministic clips. 100% coverage of `scene/`. Handbook §9. |
-| C1 | Code moved to GitHub `kleasama/animath` (user decision). Tag push is refused by the session's git proxy; checkpoints are recorded by commit hash. |
-| 2.8 | Kokoro v1.0 weights from the GitHub release (Hugging Face blocked in containers), SHA-256 pinned in the Dockerfile. Model token durations replace forced alignment (HANDBOOK 10.8). |
-| 2.4 | SymPy equivalence check deferred to WP9; pandoc 3.9 bundled via `pypandoc-binary` (subprocess). |
-| C2 | PRs #1–#5 merged. 220 tests, 100% line+branch coverage, mypy strict, licences clean. For WP7/WP8: complex data refs need `part` ∈ {abs, real, imag}; the planner receives the primitive catalog as an argument (Rule 6.2). |
-| C3 | PRs #7, #8 merged. 286 tests, 100% line+branch coverage. For WP9: pass `scene.catalog()` and the numerics kernel schemas into `plan.run`; planner depends on `jsonschema`. |
-| 5.3 | Session mode (`llm = session`, PR #12); streamed API calls (PR #11). Golden set at 1080p60, espeak-ng: Q1–Q5 pass on EFIE, Gauss, GMRES; Q6 Gauss 0.153 > 0.1; Q7 4.0–4.5; N1 0.12–0.55. |
-| C5 | v0.1 = main after PRs #11–#14. 377 tests, 100% line+branch coverage. |
-| v0.2 | PRs #15–#17: Kokoro sentence narration with model word timings, gain and limiter loudness; `h2.rss` RS-S kernel, `hierarchy` primitive, `data.npz` arrays pinned by SHA-256; written-maths captions. 517 tests, 100% line+branch coverage. |
-| v0.3 | PRs #18, #19: 135 wpm pacing with `Line.pause_s` holds honoured by narration and voice speed from `Params.wpm`; word-timed actions on named parts; repeat loops with speed-up; resumable views; `code` primitive in the planner; byte-identical clips (x264 `mbtree=0`). 588 tests, 100% line+branch coverage. |
-| v0.4 | PRs #20–#22: word-timed hierarchy verbs and live parts; one Kokoro speed per video so words land on `Params.wpm`; planner length $E_i = L + \sum_\ell \sigma_\ell$ from spoken (verbalized) words with $L = 0.4$ s per scene, matching narration within 0.4% (B2 closed); CI step and job timeouts. 598 tests, 100% line+branch coverage. |
-| v0.5 | PR #23: Algorithm 12.3 in `core/formula.py`; the planner rejects on-screen formulas not traced to the selected nodes and sends worked values to data requests (B1 closed); N1 accepts lists of traced formulas. 615 tests, 100% line+branch coverage. |
-| C4 | PRs #9, #10 merged. `scene.animate` returns `(SceneRender, Usage)` and is the pipeline default; `pipeline.render_only` is the no-LLM path. 362 tests, 100% line+branch coverage. |
+| Tests | 623 passed, 1 skipped; 100 % line and branch coverage |
+| Last golden evaluation (EFIE, Gauss, GMRES; 1080p60, espeak-ng) | $Q_1$–$Q_5$ pass; $Q_6$ Gauss 0.153 > 0.1; $Q_7$ 4.0–4.5; $N_1$ 0.12–0.55; predates the spoken-word pacing and planner formula tracing |
+
+## Milestones
+
+| Milestone | Content |
+|---|---|
+| 0.1 | Full pipeline, session mode, evaluation harness |
+| 0.2 | Kokoro sentence narration with model word times; gain and limiter loudness; `h2.rss`, `hierarchy`, `data.npz`; written-maths captions |
+| 0.3 | `wpm` pacing and pauses; word-timed actions; loops; persistent views; `code` primitive in the planner; byte-identical clips |
+| 0.4 | Word-timed `hierarchy` verbs; one voice speed per video; planner length from spoken words |
+| 0.5 | Planner traces on-screen formulas (Algorithm 12.3) |
 
 ## Open questions
 
 | # | Question | Default |
 |---|---|---|
-| O1 | API key in the environment | `ANIMATH_API_KEY` visible to sessions; API account lacks credit, so live runs use session mode |
+| O1 | Live API runs | need a funded `ANIMATH_API_KEY`; session mode runs without one |
 
 ## Known bugs
 
-| # | Bug | Owner |
-|---|---|---|
+None.

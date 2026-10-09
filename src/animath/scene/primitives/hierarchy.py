@@ -504,14 +504,10 @@ class Board(VGroup):
 
 
 class Hierarchy(Primitive[HierarchyArgs]):
-    """Plate and block-operator views of an h2.rss DataSet. Verbs walk its factorisation on the
-    current level: select, footprint (N(t)), ring (two hops), clear, and the stage phases rotate,
-    split, zero, eliminate, schur, fill take a cluster part (default the current one); colour a
-    cluster or colour class (default all, so the rest); wave a colour class (default the next);
-    drop a fill block; coarsen (which finishes the level) and top none. Parts: t (a stage with
-    most near neighbours), s (its next neighbour), cluster:k, colour:c, block:a:b. `steps` share
-    the visual's life equally; for word timing and views use actions instead, not both, since a
-    resumed view replays steps before actions."""
+    """Plate and block-operator views of an h2.rss DataSet; verbs walk its factorisation by level.
+    Parts: t (stage with most near neighbours), s (its next neighbour), cluster:k, colour:c,
+    block:a:b. Verbs take a cluster (default the current one); colour also a class, wave a class,
+    drop a block, coarsen and top none. Use evenly timed `steps` or word-timed actions, not both."""
 
     name = "hierarchy"
     args = HierarchyArgs
