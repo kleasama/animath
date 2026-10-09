@@ -19,7 +19,7 @@ __all__ = ["evaluate", "formula", "judge", "metrics"]
 def evaluate(
     store: Store, digest: str, expected: DocIR | None = None, llm: LLM | None = None
 ) -> dict[str, float]:
-    """Q1..Q7 and N1 of the manifest `digest`; Q2 needs `expected`, Q7 needs `llm`."""
+    """Metrics of manifest `digest`; q2 needs `expected`, q7 needs `llm`."""
     m = store.get(Manifest, digest)
     a = m.artifacts
     board = store.get(Storyboard, a["storyboard"])

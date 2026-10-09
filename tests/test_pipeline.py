@@ -89,7 +89,7 @@ def clip(
     llm: LLM,
     params: Params,
 ) -> tuple[SceneRender, Usage]:
-    """Animate stand-in with the WP8 signature: a black clip of the narration's length."""
+    """Animate stand-in: a black clip of the narration's length."""
     size, d = f"{params.width}x{params.height}", narration.duration_s
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "c.mp4"

@@ -1,4 +1,4 @@
-"""Q7: rubric score of a video by an LLM judge on storyboard, source equations and keyframes."""
+"""Rubric score of a video by an LLM judge on storyboard, source equations and keyframes."""
 
 import json
 from io import BytesIO
