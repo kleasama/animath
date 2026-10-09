@@ -230,7 +230,7 @@ def _child(
 
 
 class Pipeline:
-    """Phi_7 o Phi_5 o (Phi_4 || Phi_6) o Phi_3 o Phi_2 o Phi_1; gates after K and B (F12)."""
+    """Phi_7 o Phi_5 o (Phi_4 || Phi_6) o Phi_3 o Phi_2 o Phi_1; gated after graph, storyboard."""
 
     def __init__(
         self,
@@ -369,7 +369,7 @@ class Pipeline:
         self, b: SourceBundle, edit: str | None = None, part: str | None = None
     ) -> Manifest | Paused:
         """`edit` approves the first pending gate ('' as is, else by JSON);
-        `part` restricts D to a section path."""
+        `part` restricts the document to a section path."""
         p, pending = b.params, [edit]
         doc = self.ingest(b)
         if part is not None:

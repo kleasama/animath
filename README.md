@@ -1,15 +1,8 @@
 # Animath
 
 [![check](https://github.com/kleasama/animath/actions/workflows/check.yml/badge.svg)](https://github.com/kleasama/animath/actions/workflows/check.yml)
-![python](https://img.shields.io/badge/python-3.12%2B-blue)
-[![license](https://img.shields.io/badge/license-BSD--3--Clause-green)](LICENSE)
 
-Animath turns a mathematical document (Markdown, LaTeX or PDF) into a narrated, captioned video of animated formulas, derivations, matrices, plots and live numerical demonstrations. It targets numerical computing (integral equations, Krylov solvers, hierarchical matrices) and accepts any mathematical text.
-
-```
-animath run notes.tex --section 2.1 -p duration_s=300
-→ video.mp4  subs.vtt  manifest.json
-```
+Turns a mathematical document (Markdown, LaTeX or PDF) into a narrated, animated video.
 
 Each stage stores its output by content hash, so an interrupted or edited run resumes where its input changed.
 
@@ -20,9 +13,9 @@ Each stage stores its output by content hash, so an interrupted or edited run re
 Linux (tested on Ubuntu 24.04), Python ≥ 3.12, [`uv`](https://docs.astral.sh/uv/).
 
 ```sh
-sudo apt-get install -y --no-install-recommends ffmpeg pandoc libcairo2-dev libpango1.0-dev \
-  pkg-config dvisvgm espeak-ng libosmesa6 texlive-latex-base texlive-latex-extra \
-  texlive-fonts-recommended texlive-science texlive-extra-utils nodejs npm
+sudo apt-get install -y --no-install-recommends build-essential ffmpeg pandoc \
+  libcairo2-dev libpango1.0-dev pkg-config dvisvgm espeak-ng libosmesa6 nodejs npm \
+  texlive-latex-base texlive-latex-extra texlive-fonts-recommended texlive-science texlive-extra-utils
 sudo npm install -g speech-rule-engine@4.1.4 mathjax-full@3.2.1
 export NODE_PATH=$(npm root -g)
 
@@ -31,9 +24,9 @@ make setup        # .venv from requirements.lock
 make check        # lint, types, tests
 ```
 
-`docker/Dockerfile` bundles the same toolchain, including the voice below.
+`docker/Dockerfile` installs the same toolchain and the voice below.
 
-**Voice.** Download Kokoro v1.0 (`kokoro-v1.0.onnx`, `voices-v1.0.bin` from the [kokoro-onnx release](https://github.com/thewh1teagle/kokoro-onnx/releases/tag/model-files-v1.0), and its `config.json`) into a directory and set `ANIMATH_KOKORO` to it. Otherwise espeak-ng speaks.
+**Voice.** Download Kokoro v1.0 (`kokoro-v1.0.onnx`, `voices-v1.0.bin` from the [kokoro-onnx release](https://github.com/thewh1teagle/kokoro-onnx/releases/tag/model-files-v1.0); [`config.json`](https://github.com/thewh1teagle/kokoro-onnx/blob/main/src/kokoro_onnx/config.json) from its source) into a directory and set `ANIMATH_KOKORO` to it. Otherwise espeak-ng speaks.
 
 **Model.** Set `ANIMATH_API_KEY` (or `ANTHROPIC_API_KEY`) to an Anthropic API key. Alternatively, `ANIMATH_LLM=session` writes each model request to `<store>/pending/<key>/request.json` and stops; write `answer.json` beside it, by hand or with a coding agent, and run again.
 

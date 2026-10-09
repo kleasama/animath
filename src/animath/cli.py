@@ -48,8 +48,8 @@ def _parser() -> argparse.ArgumentParser:
         x.add_argument("-p", "--param", action="append", default=[], metavar="KEY=VALUE")
     e = sub.add_parser("eval", help="quality metrics of a manifest")
     e.add_argument("digest")
-    e.add_argument("--expected", type=Path, help="reference DocIR JSON for Q2")
-    e.add_argument("--judge", action="store_true", help="LLM rubric Q7")
+    e.add_argument("--expected", type=Path, help="reference DocIR JSON, for formula fidelity")
+    e.add_argument("--judge", action="store_true", help="add an LLM rubric score")
     return p
 
 

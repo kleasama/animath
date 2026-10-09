@@ -1,4 +1,8 @@
-"""Quality metrics Q1..Q6 on stored artifacts."""
+"""Quality metrics on stored artifacts.
+
+q1 render pass rate, q2 formula fidelity, q3 sync error (ms), q4 failed checks per scene,
+q5 key-node coverage, q6 relative length error, q7 judge score, n1 untraced formula fraction.
+"""
 
 from collections.abc import Mapping
 
@@ -61,7 +65,7 @@ def q6(manifest: Manifest, params: Params) -> float:
 
 
 def n1(board: Storyboard, doc: DocIR) -> float:
-    """Fraction of on-screen formulas traceable to D or derived (formula.untraced)."""
+    """Fraction of on-screen formulas traceable to the document or derived (formula.untraced)."""
     shown, bad = formula.untraced(board, doc)
     return 1.0 - len(bad) / shown if shown else 1.0
 
@@ -75,7 +79,7 @@ def automatic(
     manifest: Manifest,
     params: Params,
 ) -> dict[str, float]:
-    """Metrics computable without reference data or judge: Q1, Q3..Q6, N1."""
+    """Metrics computable without reference data or judge."""
     return {
         "q1_render": q1(renders),
         "q3_sync_ms": q3(renders, narrations),
