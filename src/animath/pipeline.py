@@ -1,4 +1,4 @@
-"""Orchestration of Phi_1..Phi_7."""
+"""Orchestration of stages Φ1..Φ7: ingest, extract, plan, compute, animate, narrate, assemble."""
 
 import io
 import multiprocessing as mp
@@ -77,7 +77,7 @@ def render_only(
     llm: LLM,
     params: Params,
 ) -> tuple[SceneRender, Usage]:
-    """Phi_5 by the primitive library alone: no codegen, repair, or critic."""
+    """Φ5 by the primitive library alone: no codegen, repair, or critic."""
     return render(scene, params, store, narration, data), Usage()
 
 
@@ -230,7 +230,7 @@ def _child(
 
 
 class Pipeline:
-    """Phi_7 o Phi_5 o (Phi_4 || Phi_6) o Phi_3 o Phi_2 o Phi_1; gated after graph, storyboard."""
+    """Φ7 ∘ Φ5 ∘ (Φ4 ∥ Φ6) ∘ Φ3 ∘ Φ2 ∘ Φ1, with approval gates after Φ2 and Φ3."""
 
     def __init__(
         self,

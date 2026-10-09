@@ -12,7 +12,7 @@ from animath.numerics.base import Kernel, Result
 
 
 class Npz(Kernel):
-    """Numeric arrays of a user-supplied .npz pinned by SHA-256; a 0-d `meta` member holds a JSON
+    """Numeric arrays of a local .npz pinned by SHA-256; a 0-d `meta` member holds a JSON
     object. Never planned from source text: path and hash come from the caller."""
 
     path: str = Field(pattern=r"^/.+\.npz$", description="absolute path of the .npz")

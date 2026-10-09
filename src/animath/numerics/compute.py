@@ -37,7 +37,7 @@ def parse(request: DataRequest) -> Kernel:
 
 
 def compute(request: DataRequest, store: Store) -> DataSet:
-    """Phi_4: DataSet for `request`, cached under H(numerics, VERSION, kind, normalized params)."""
+    """Φ4: DataSet for `request`, cached by version, kind and validated params."""
     kernel = parse(request)
     key = Store.key("numerics", VERSION, request.kind, digest_of(kernel))
     if (hit := store.lookup(DataSet, key)) is not None:

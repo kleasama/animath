@@ -32,7 +32,7 @@ from animath.llm import LLM, Replay
 from animath.narrate.tts import Espeak
 from animath.pipeline import Paused, Pipeline, PipelineError
 from animath.plan.draft import DAction, DData, DLine, Draft, DScene, DVisual
-from tests.plan.conftest import Fake
+from tests.fake import Fake
 
 GOLDEN = Path(__file__).parent / "golden"
 EQ = {
@@ -127,7 +127,7 @@ def test_run_end_to_end(tmp_path: Path) -> None:
     a = m.artifacts
     assert {"source", "doc", "graph", "storyboard", "render/s1", "narration/s2"} <= a.keys()
     assert any(k.startswith("dataset/") for k in a)
-    assert m.usage == Usage(input_tokens=14, output_tokens=6)
+    assert m.usage == Usage(input_tokens=2, output_tokens=6)
     assert set(pipeline.STAGES) <= m.timings_s.keys()
     assert m.metrics["q1_render"] == 1.0
     assert m.metrics["q3_sync_ms"] == 0.0

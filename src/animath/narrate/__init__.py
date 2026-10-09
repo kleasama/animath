@@ -1,3 +1,5 @@
+"""Stage Φ6: Storyboard -> Narration per scene."""
+
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 
@@ -48,7 +50,7 @@ def sentences(
 def narrate(
     board: Storyboard, store: Store, tts: TTS, verbalizer: Verbalizer, workers: int = 1
 ) -> dict[str, str]:
-    """Phi_6: Narration digest per scene id, in storyboard order; cached scenes skip synthesis.
+    """Φ6: Narration digest per scene id, in storyboard order; cached scenes skip synthesis.
 
     One speed for the storyboard brings its spoken words to `tts.wpm`.
     """

@@ -10,6 +10,7 @@ from animath.core.errors import IngestError
 Check = Callable[[Sequence[str], Mapping[str, str]], dict[int, str]]
 PREAMBLE = r"\documentclass{article}\usepackage{amsmath,amssymb,bm}"
 MARK = "@@animath-eq-"
+TIMEOUT_S = 120
 
 
 def balanced(tex: str) -> bool:
@@ -35,9 +36,7 @@ def errors(log: str) -> dict[int, str]:
     return out
 
 
-def compile_errors(
-    equations: Sequence[str], macros: Mapping[str, str], timeout: float = 120
-) -> dict[int, str]:
+def compile_errors(equations: Sequence[str], macros: Mapping[str, str]) -> dict[int, str]:
     """Typeset each equation in display mode with pdflatex; index -> first error."""
     bad = {i: "unbalanced braces" for i, e in enumerate(equations) if not balanced(e)}
     todo = [(i, e) for i, e in enumerate(equations) if i not in bad]
@@ -53,7 +52,7 @@ def compile_errors(
         (Path(d) / "eq.tex").write_text(src)
         cmd = [exe, "-interaction=nonstopmode", "-draftmode", "-no-shell-escape", "eq.tex"]
         try:
-            subprocess.run(cmd, cwd=d, capture_output=True, timeout=timeout, check=False)
+            subprocess.run(cmd, cwd=d, capture_output=True, timeout=TIMEOUT_S, check=False)
             log = (Path(d) / "eq.log").read_text(errors="replace")
         except (subprocess.TimeoutExpired, OSError) as e:
             raise IngestError(f"pdflatex failed: {e}") from e

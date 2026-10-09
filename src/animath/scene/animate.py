@@ -49,8 +49,9 @@ def animate(
     llm: LLM,
     params: Params,
 ) -> tuple[SceneRender, Usage]:
-    """With the usage of all LLM calls; Usage() on a stage key hit. Not thread-safe;
-    parallelize over processes."""
+    """SceneRender of `scene`, repaired up to `max_retries` times until it passes `check`, with the
+    usage of all LLM calls; Usage() on a stage key hit. Not thread-safe; parallelize over
+    processes."""
     inputs = [digest_of(data[r.digest]) if r.digest in data else None for r in scene.data]
     key = Store.key(
         "animate",

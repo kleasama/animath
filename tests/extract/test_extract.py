@@ -5,7 +5,7 @@ from animath.core.schemas import Block, BlockType, DocIR, Edge, Node, NodeKind, 
 from animath.core.store import Store
 from animath.extract import draft, graph, run
 from animath.extract.draft import DEdge, DNode, Draft, chunks, line, prompt
-from tests.extract.conftest import Fake
+from tests.fake import Fake
 
 
 def nd(id: str, kind: str = "concept", src: tuple[str, ...] = ("b0",), **kw: object) -> DNode:
@@ -133,7 +133,7 @@ def test_run_repairs_and_caches(store: Store, doc: DocIR) -> None:
     fake = Fake(bad, good)
     kg, usage = run(doc, store, fake)
     assert [n.id for n in kg.nodes] == ["a"]
-    assert usage == Usage(input_tokens=14)
+    assert usage == Usage(input_tokens=2)
     assert fake.prompts[1].startswith(fake.prompts[0])
     assert "Fix these problems:\n- edge a depends_on z: unknown nodes ['z']" in fake.prompts[1]
     assert run(doc, store, Fake()) == (kg, Usage())

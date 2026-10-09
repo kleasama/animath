@@ -8,7 +8,8 @@ from animath.core.store import Store
 from animath.ingest import run
 from animath.ingest.pdf import Transcript
 from animath.llm import Replay
-from tests.ingest.conftest import Fake, bundle, tree
+from tests.fake import Fake
+from tests.ingest.conftest import bundle, tree
 
 CASES = [
     ("efie", SourceFormat.MD, "efie.md"),
@@ -28,7 +29,7 @@ def test_golden(store: Store, golden: Path, name: str, fmt: SourceFormat, entry:
     if os.environ.get("ANIMATH_UPDATE_GOLDEN"):
         path.write_text(doc.model_dump_json(indent=1, exclude_defaults=True) + "\n")
     assert doc == DocIR.model_validate_json(path.read_text())
-    assert usage == Usage(input_tokens=5 if fixture else 0)
+    assert usage == Usage(input_tokens=1 if fixture else 0)
     offline = Replay(store, None, "test")
     assert run(b, store, offline) == (doc, Usage())
     if fixture is None:

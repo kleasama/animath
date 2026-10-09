@@ -23,8 +23,8 @@ from animath.scene.critic import (
 )
 from animath.scene.primitives import Cue
 from animath.scene.render import shoot
+from tests.fake import Fake
 from tests.scene.conftest import scene
-from tests.scene.fake import Fake
 
 EQ = Visual(primitive="equation", args={"latex": "x", "until": "b"})
 TXT = Visual(primitive="text", args={"text": "T", "region": "title"}, at="b")

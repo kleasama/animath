@@ -125,9 +125,10 @@ def instant(a: Animation) -> None:
     a.finish()
 
 
-def color(name: str | None, default: ManimColor = YELLOW) -> ManimColor:
+def color(name: str | None) -> ManimColor:
+    """Manim colour of `#RRGGBB` or a Manim colour name; YELLOW for None."""
     if name is None:
-        return default
+        return YELLOW
     if name.startswith("#"):
         return ManimColor(name)
     c = getattr(manim, name, None)

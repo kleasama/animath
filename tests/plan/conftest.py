@@ -1,30 +1,14 @@
 import json
-from collections.abc import Sequence
 from typing import Any
 
 import pytest
-from pydantic import BaseModel, JsonValue
+from pydantic import JsonValue
 
-from animath.core.schemas import Usage
 from animath.numerics import KINDS
 from animath.plan.draft import DAction, DData, DLine, Draft, DScene, DSymbol, DVisual
 from animath.scene import catalog
 
 T = 28.0
-
-
-class Fake:
-    """LLM returning queued drafts in order, recording prompts."""
-
-    def __init__(self, *outs: BaseModel) -> None:
-        self.outs = list(outs)
-        self.prompts: list[str] = []
-
-    def parse[M: BaseModel](
-        self, schema: type[M], system: str, prompt: str, images: Sequence[bytes] = ()
-    ) -> tuple[M, Usage]:
-        self.prompts.append(prompt)
-        return schema.model_validate(self.outs.pop(0).model_dump()), Usage(input_tokens=7)
 
 
 def line(n: int, bookmark: str | None = None, *acts: DAction) -> DLine:

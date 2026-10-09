@@ -33,10 +33,10 @@ def _parser() -> argparse.ArgumentParser:
     s.add_argument("kind", choices=sorted(ARTIFACTS))
     i = sub.add_parser("inspect", help="print a stored artifact")
     i.add_argument("kind", choices=sorted(ARTIFACTS))
-    i.add_argument("digest")
+    i.add_argument("digest", help="artifact digest")
     sub.add_parser("config", help="print effective settings")
     r = sub.add_parser("run", help="source to video; pauses at approval gates")
-    r.add_argument("source", type=Path)
+    r.add_argument("source", type=Path, help="Markdown, LaTeX or PDF file")
     r.add_argument("--pages", help="PDF pages, e.g. 3-7,9")
     r.add_argument("--section", help="section path: titles split by '/', or ordinals 2.3.1")
     r.add_argument("--approve", action="store_true", help="approve the pending gate as is")
@@ -45,9 +45,16 @@ def _parser() -> argparse.ArgumentParser:
     t.add_argument("name", choices=pipeline.STAGES)
     t.add_argument("digest", help="input: source, doc, graph, or storyboard digest")
     for x in (r, t):
-        x.add_argument("-p", "--param", action="append", default=[], metavar="KEY=VALUE")
+        x.add_argument(
+            "-p",
+            "--param",
+            action="append",
+            default=[],
+            metavar="KEY=VALUE",
+            help="video parameter; repeatable",
+        )
     e = sub.add_parser("eval", help="quality metrics of a manifest")
-    e.add_argument("digest")
+    e.add_argument("digest", help="manifest digest")
     e.add_argument("--expected", type=Path, help="reference DocIR JSON, for formula fidelity")
     e.add_argument("--judge", action="store_true", help="add an LLM rubric score")
     return p

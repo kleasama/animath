@@ -34,7 +34,7 @@ def part(
 
 
 def run(doc: DocIR, store: Store, llm: LLM, retries: int = 3) -> tuple[KnowledgeGraph, Usage]:
-    """Extract `doc`; skipped iff a graph is indexed under the stage key (Invariant 4.1.2)."""
+    """KnowledgeGraph of `doc`, chunk by chunk; skipped iff one is indexed under the stage key."""
     key = Store.key("extract", VERSION, digest_of(doc))
     if (kg := store.lookup(KnowledgeGraph, key)) is not None:
         return kg, Usage()

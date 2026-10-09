@@ -75,7 +75,7 @@ def nodes(lvl: int) -> range:
 
 
 def below(t: int, lvl: int) -> tuple[int, int]:
-    """First and last descendant at level lvl of a cluster at level ell(t) <= lvl."""
+    """First and last descendant at level lvl of cluster t, whose level is at most lvl."""
     d = lvl - ((t + 1).bit_length() - 1)
     return (t + 1) * 2**d - 1, (t + 2) * 2**d - 2
 

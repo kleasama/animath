@@ -21,6 +21,7 @@ from animath.llm import LLM
 Fetch = Callable[[str], bytes]
 CHUNK = 4
 SCALE = 2.0
+TIMEOUT_S = 60
 ARXIV = re.compile(r"arXiv:\s*(\d{4}\.\d{4,5}|[a-z-]+(?:\.[A-Z]{2})?/\d{7})(v\d+)?")
 SYSTEM = """Transcribe the given pages of a mathematical document into blocks, in reading order.
 - Types: heading (level 1-6), paragraph, equation, theorem, proof, algorithm, figure, list, code.
@@ -57,10 +58,10 @@ class Transcript(BaseModel):
     bib: list[TBib]
 
 
-def fetch_url(url: str, timeout: float = 60) -> bytes:
+def fetch_url(url: str) -> bytes:
     req = urllib.request.Request(url, headers={"User-Agent": "animath"})
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
+        with urllib.request.urlopen(req, timeout=TIMEOUT_S) as r:
             data: bytes = r.read()
             return data
     except (urllib.error.URLError, OSError) as e:
