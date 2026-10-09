@@ -1,4 +1,4 @@
-"""Orchestration of stages Φ1..Φ7: ingest, extract, plan, compute, narrate, animate, assemble."""
+"""Orchestration of stages Φ1..Φ7: ingest, extract, plan, compute, animate, narrate, assemble."""
 
 import io
 import multiprocessing as mp

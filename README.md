@@ -62,7 +62,7 @@ Kokoro voice files: `kokoro-v1.0.onnx` and `voices-v1.0.bin` from the [kokoro-on
 .venv/bin/animath run tests/golden/efie/efie.md -p duration_s=180
 ```
 
-The run pauses for review after the knowledge graph and after the storyboard; continue with `--approve`, or with `--edit artifact.json` to use an edited artifact. On completion it prints the path of the MP4. Artifacts are cached by content hash in `.animath/`, so a rerun resumes at the first stage whose input changed.
+The run pauses for review after the knowledge graph and after the storyboard; continue with `--approve`, or with `--edit artifact.json` to use an edited artifact. On completion it prints the manifest digest and the MP4 path. Artifacts are cached by content hash in `.animath/`, so a rerun resumes at the first stage whose input changed.
 
 | Option | Effect |
 |---|---|
@@ -104,7 +104,7 @@ The run pauses for review after the knowledge graph and after the storyboard; co
 make check
 ```
 
-Runs ruff, mypy `--strict`, pytest with at least 95 % line and branch coverage, and a licence audit. CI runs the same on every push.
+Runs ruff, mypy `--strict`, pytest with at least 95 % line and branch coverage, and a licence audit. CI runs it on pull requests and on pushes to main.
 
 ## License
 

@@ -34,9 +34,9 @@ def run(
     kernels: Schemas | None = None,
     speaker: Speaker | None = None,
 ) -> tuple[Storyboard, Usage]:
-    """Storyboard of `graph`, drafted by `llm` and repaired until valid; skipped iff one is indexed
-    under the stage key. `speaker` counts the spoken words of lines; without it, they are
-    estimated."""
+    """Storyboard of `graph`, drafted by `llm` and repaired up to `max_retries` times; skipped iff
+    one is indexed under the stage key. `speaker` counts the spoken words of lines; without it,
+    they are estimated."""
     kernels = kernels or {}
     p = params.model_dump(mode="json", include=PLAN_PARAMS)
     said = speaker.lines if speaker else None
