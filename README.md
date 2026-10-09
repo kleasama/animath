@@ -1,22 +1,11 @@
 # Animath
 
 [![check](https://github.com/kleasama/animath/actions/workflows/check.yml/badge.svg)](https://github.com/kleasama/animath/actions/workflows/check.yml)
-[![license](https://img.shields.io/badge/license-BSD--3--Clause-blue)](LICENSE)
 
 Animath turns a mathematical document (Markdown, LaTeX or PDF) into a narrated, captioned, animated video.
 
 > [!NOTE]
 > Experimental. The Docker image and the Anthropic API path have not yet been run end to end.
-
-## Contents
-
-- [Install](#install)
-- [Configure](#configure)
-- [Run](#run)
-- [Commands](#commands)
-- [Pipeline](#pipeline)
-- [Develop](#develop)
-- [License](#license)
 
 ## Install
 
@@ -52,7 +41,7 @@ Alternatively, `docker/Dockerfile` builds an image with the full toolchain and t
 | `ANIMATH_LLM=session` | no API: each model request is written to `.animath/pending/<key>/request.json`; write `answer.json` beside it and run again |
 | `ANIMATH_KOKORO` | directory with the Kokoro voice files; without it, espeak-ng speaks |
 
-Every setting printed by `animath config` can be overridden by `ANIMATH_<NAME>` or by a TOML file passed with `--config`.
+Every setting printed by `animath config` can be overridden by `ANIMATH_<NAME>` or by a TOML file passed before the subcommand: `animath --config settings.toml run …`.
 
 Kokoro voice files: `kokoro-v1.0.onnx` and `voices-v1.0.bin` from the [kokoro-onnx release](https://github.com/thewh1teagle/kokoro-onnx/releases/tag/model-files-v1.0), and [`config.json`](https://github.com/thewh1teagle/kokoro-onnx/blob/main/src/kokoro_onnx/config.json).
 
@@ -104,7 +93,7 @@ The run pauses for review after the knowledge graph and after the storyboard; co
 make check
 ```
 
-Runs ruff, mypy `--strict`, pytest with at least 95 % line and branch coverage, and a licence audit. CI runs it on pull requests and on pushes to main.
+Runs ruff, mypy `--strict`, pytest with at least 95 % line and branch coverage, and a license audit. CI runs it on pull requests and on pushes to main.
 
 ## License
 
