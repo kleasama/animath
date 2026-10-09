@@ -57,10 +57,10 @@ class Transcript(BaseModel):
     bib: list[TBib]
 
 
-def fetch_url(url: str, timeout: float = 60) -> bytes:
+def fetch_url(url: str) -> bytes:
     req = urllib.request.Request(url, headers={"User-Agent": "animath"})
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
+        with urllib.request.urlopen(req, timeout=60) as r:
             data: bytes = r.read()
             return data
     except (urllib.error.URLError, OSError) as e:

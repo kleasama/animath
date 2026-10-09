@@ -8,8 +8,8 @@ from animath.core.store import Store
 from animath.scene.animate import animate
 from animath.scene.critic import Issue, Verdict
 from animath.scene.repair import Fix, Patch, pitfalls
+from tests.fake import Fake
 from tests.scene.conftest import REQ, npy, scene
-from tests.scene.fake import Fake
 
 P = Params(width=320, height=240, fps=15, max_retries=2)
 CIRCLE = json.dumps({"code": "def build(array):\n    return Circle(radius=2, color=BLUE)"})

@@ -10,7 +10,8 @@ from animath.core.store import Store
 from animath.llm import Replay
 from animath.plan import run, select
 from animath.plan.draft import Draft, prompt
-from tests.plan.conftest import Fake, T, line, make_draft
+from tests.fake import Fake
+from tests.plan.conftest import T, line, make_draft
 
 Cat = dict[str, dict[str, JsonValue]]
 
@@ -27,7 +28,7 @@ def test_run_caches(
     fake = Fake(draft)
     board, usage = run(graph, Params(duration_s=T), cat, store, fake, kernels)
     assert isinstance(board, Storyboard)
-    assert usage == Usage(input_tokens=7)
+    assert usage == Usage(input_tokens=1)
     task = json.loads(fake.prompts[0])
     assert (task["words_target"], task["scenes_target"], task["seeds"]) == (54, 1, ["mom"])
     assert task["wpm"] == 135
@@ -49,7 +50,7 @@ def test_run_keys_on_the_speaker(
 
     p, sp = Params(duration_s=T), Speaker()
     board, _ = run(graph, p, cat, store, Fake(draft), kernels)
-    assert run(graph, p, cat, store, Fake(draft), kernels, sp) == (board, Usage(input_tokens=7))
+    assert run(graph, p, cat, store, Fake(draft), kernels, sp) == (board, Usage(input_tokens=1))
     assert run(graph, p, cat, store, Fake(), kernels, sp) == (board, Usage())
 
 
@@ -58,7 +59,7 @@ def test_repair_then_success(
 ) -> None:
     fake = Fake(bad(), draft)
     board, usage = run(graph, Params(duration_s=T), cat, store, fake, kernels)
-    assert usage == Usage(input_tokens=14)
+    assert usage == Usage(input_tokens=2)
     assert fake.prompts[1].startswith(fake.prompts[0])
     assert fake.prompts[1].endswith(
         "Errors:\nscene s2: nothing changes for 15 s from scene s2.narration[0]; add actions\n"

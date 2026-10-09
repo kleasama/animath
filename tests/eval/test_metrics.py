@@ -20,7 +20,7 @@ from animath.core.schemas import (
 )
 from animath.eval import judge, metrics
 from animath.pipeline import bundle
-from tests.plan.conftest import Fake
+from tests.fake import Fake
 from tests.test_pipeline import GOLDEN, P, make
 
 H = "0" * 64

@@ -16,7 +16,7 @@ TOL_S = 0.1
 
 
 def timeline(durations: Sequence[float], fps: Fraction) -> tuple[list[int], list[int]]:
-    """Frames n_i and audio samples S_i per segment."""
+    """Video frames and audio samples per segment; samples follow cumulative frame times."""
     frames = [math.ceil(fps * Fraction(d) - Fraction(1, 10**6)) for d in durations]
     ends = [0, *(round(ffmpeg.RATE * sum(frames[: i + 1]) / fps) for i in range(len(frames)))]
     return frames, [b - a for a, b in pairwise(ends)]
@@ -46,7 +46,7 @@ def assemble(
     narrations: Sequence[str],
     threads: int = 1,
 ) -> str:
-    """Phi_7: renders and narrations of a storyboard -> Manifest digest (cached by input key)."""
+    """Φ7: renders and narrations of a storyboard -> Manifest digest, cached by input key."""
     t0 = time.perf_counter()
     ids = [s.id for s in store.get(Storyboard, board).scenes]
     rs = _by_scene(store, SceneRender, renders)

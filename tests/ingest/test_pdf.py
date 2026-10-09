@@ -15,7 +15,7 @@ from animath.core.errors import IngestError
 from animath.core.schemas import BlockType, Usage
 from animath.ingest import pdf
 from animath.ingest.pdf import TBib, TBlock, Transcript
-from tests.ingest.conftest import Fake
+from tests.fake import Fake
 
 MAIN = b"\\documentclass{article}\\begin{document}\\section{S}x\\end{document}"
 
@@ -106,9 +106,9 @@ def test_transcribe_repairs_then_gives_up() -> None:
 
     out, usage = pdf.transcribe(llm, [b"p1", b"p2"], range(0, 2), check, 3)
     assert out.blocks == [eq]
-    assert usage == Usage(input_tokens=10)
-    assert llm.calls[0] == ("Pages 1-2 of 2.", 2)
-    assert "'x': boom" in llm.calls[1][0]
+    assert usage == Usage(input_tokens=2)
+    assert (llm.prompts[0], len(llm.calls[0][2])) == ("Pages 1-2 of 2.", 2)
+    assert "'x': boom" in llm.prompts[1]
     with pytest.raises(IngestError, match="pages 1-1: equations fail after 0 retries"):
         pdf.transcribe(llm, [b"p"], range(0, 1), lambda e, m: {0: "bad"}, 0)
 
@@ -139,9 +139,12 @@ def test_merge_normalises_llm_output() -> None:
 def test_parse_chunks_pages(monkeypatch: pytest.MonkeyPatch) -> None:
     llm = Fake(t(tb("paragraph", text="a")), t(tb("paragraph", page=5, text="b")))
     doc, usage = pdf.parse(blank(5), "s", llm, fetch=None, workers=1)
-    assert [c for c in llm.calls] == [("Pages 1-4 of 5.", 4), ("Pages 5-5 of 5.", 1)]
+    assert [(p, len(i)) for _, p, i in llm.calls] == [
+        ("Pages 1-4 of 5.", 4),
+        ("Pages 5-5 of 5.", 1),
+    ]
     assert [b.text for b in doc.blocks] == ["a", "b"]
-    assert usage == Usage(input_tokens=10)
+    assert usage == Usage(input_tokens=2)
 
 
 def test_parse_prefers_arxiv_source(

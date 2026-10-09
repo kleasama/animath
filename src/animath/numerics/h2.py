@@ -80,8 +80,9 @@ def cluster_tree(x: F64, leaf: int) -> Tree:
 
 
 def partition(tree: Tree, eta: float) -> tuple[list[list[int]], list[list[int]]]:
-    """Level-synchronous traversal: ch(N(parent)) splits into the near list N(t) and the
-    terminal far list F(t) of pairs with dist > 0 and (h_t + h_s)/2 <= eta dist."""
+    """Near and far lists, level by level: the children of the parent's near list split into the
+    near list of t and its far list, the clusters s with dist > 0 and (h_t + h_s)/2 <= eta dist,
+    h being box diameters."""
     h = np.linalg.norm(tree.hi - tree.lo, axis=1)
     near: list[list[int]] = [[0]]
     far: list[list[int]] = [[]]

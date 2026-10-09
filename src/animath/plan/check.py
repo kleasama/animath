@@ -159,8 +159,8 @@ def replay(
     wpm: int,
     count: Callable[[str], float],
 ) -> None:
-    """Later passes replay the first pass's actions under the brief lines: pass q lasts
-    D_q = max(D_1 / s^q, n STEP_S), at rate D_1 / D_q."""
+    """Later passes replay the first pass's actions under the brief lines: with d1 the first
+    pass's length, pass q lasts dq = max(d1 / s^q, STEP_S per action) and plays at rate d1 / dq."""
     onsets(beats, wpm, count)
     i0 = beats.index(briefs[0]) - len(lines)
     d1 = sum(slot(beats, i) for i in range(i0, i0 + len(lines)))

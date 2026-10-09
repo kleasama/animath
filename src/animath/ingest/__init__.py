@@ -22,7 +22,7 @@ def run(
     check: Check | None = None,
     workers: int = 1,
 ) -> tuple[DocIR, Usage]:
-    """Ingest `bundle`; skipped iff a DocIR is indexed under the stage key (Invariant 4.1.2)."""
+    """DocIR of `bundle`; skipped iff one is indexed under the stage key."""
     key = Store.key("ingest", VERSION, digest_of(bundle), str(fetch is not None), str(bool(check)))
     if (doc := store.lookup(DocIR, key)) is not None:
         return doc, Usage()

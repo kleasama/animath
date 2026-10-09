@@ -16,8 +16,8 @@ from animath.scene.repair import (
     record,
     repair,
 )
+from tests.fake import Fake
 from tests.scene.conftest import scene
-from tests.scene.fake import Fake
 
 EQ = Visual(primitive="equation", args={"latex": "x", "until": "b"})
 TXT = Visual(primitive="text", args={"text": "T"}, at="b")

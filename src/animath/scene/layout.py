@@ -12,6 +12,7 @@ GRID: dict[Region, tuple[float, float, float, float]] = {
     "footer": (0.04, 0.03, 0.96, 0.12),
 }
 MIN_SCALE = 0.4
+EPS = 1e-6
 
 
 @dataclass(frozen=True)
@@ -33,17 +34,17 @@ class Box:
     def center(self) -> tuple[float, float]:
         return (self.x0 + self.x1) / 2, (self.y0 + self.y1) / 2
 
-    def overlaps(self, o: "Box", eps: float = 1e-6) -> bool:
-        return min(self.x1, o.x1) - max(self.x0, o.x0) > eps and (
-            min(self.y1, o.y1) - max(self.y0, o.y0) > eps
+    def overlaps(self, o: "Box") -> bool:
+        return min(self.x1, o.x1) - max(self.x0, o.x0) > EPS and (
+            min(self.y1, o.y1) - max(self.y0, o.y0) > EPS
         )
 
-    def within(self, o: "Box", eps: float = 1e-6) -> bool:
+    def within(self, o: "Box") -> bool:
         return (
-            self.x0 >= o.x0 - eps
-            and self.y0 >= o.y0 - eps
-            and self.x1 <= o.x1 + eps
-            and self.y1 <= o.y1 + eps
+            self.x0 >= o.x0 - EPS
+            and self.y0 >= o.y0 - EPS
+            and self.x1 <= o.x1 + EPS
+            and self.y1 <= o.y1 + EPS
         )
 
 
@@ -65,9 +66,10 @@ class Placement:
     scale: float = 1.0
 
 
-def violations(ps: list[Placement], f: Box, min_scale: float = MIN_SCALE) -> list[str]:
+def violations(ps: list[Placement], f: Box) -> list[str]:
+    """Placements off the frame `f`, scaled below MIN_SCALE, or overlapping while both live."""
     out = [f"{p.name}: off-frame" for p in ps if not p.box.within(f)]
-    out += [f"{p.name}: scale {p.scale:.2f} < {min_scale}" for p in ps if p.scale < min_scale]
+    out += [f"{p.name}: scale {p.scale:.2f} < {MIN_SCALE}" for p in ps if p.scale < MIN_SCALE]
     out += [
         f"{a.name} overlaps {b.name}"
         for a, b in combinations(ps, 2)
