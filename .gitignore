@@ -6,3 +6,4 @@ __pycache__/
 dist/
 .animath/
 uv.lock
+check.log
