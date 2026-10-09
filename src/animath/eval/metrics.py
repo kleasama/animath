@@ -1,7 +1,7 @@
 """Quality metrics on stored artifacts.
 
 q1 render pass rate, q2 formula fidelity, q3 sync error (ms), q4 failed checks per scene,
-q5 key-node coverage, q6 relative length error, q7 judge score, n1 untraced formula fraction.
+q5 key-node coverage, q6 relative length error, q7 judge score, n1 traced formula fraction.
 """
 
 from collections.abc import Mapping

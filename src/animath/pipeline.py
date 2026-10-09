@@ -1,4 +1,4 @@
-"""Orchestration of Phi_1..Phi_7."""
+"""Orchestration of stages Φ1..Φ7: ingest, extract, plan, compute, narrate, animate, assemble."""
 
 import io
 import multiprocessing as mp
